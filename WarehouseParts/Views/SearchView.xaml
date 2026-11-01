@@ -1,0 +1,111 @@
+<UserControl x:Class="WarehouseParts.Views.SearchView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:WarehouseParts.ViewModels">
+    <Grid Margin="4">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal" Grid.Row="0">
+            <RadioButton Content="Быстрый поиск" IsChecked="{Binding IsQuickMode}" Margin="0,0,12,0"/>
+            <RadioButton Content="Расширенный поиск" IsChecked="{Binding IsAdvancedMode}"/>
+        </StackPanel>
+
+        <TextBox Grid.Row="1" Text="{Binding QuickQuery, UpdateSourceTrigger=PropertyChanged}"
+                 KeyDown="SearchField_OnKeyDown" Margin="0,6,0,0"
+                 Visibility="{Binding IsQuickMode, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+        <Grid Grid.Row="1" Margin="0,6,0,0"
+              Visibility="{Binding IsAdvancedMode, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="220"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="220"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="180"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="150"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <TextBlock Text="Наименование" VerticalAlignment="Center" Margin="0,0,6,4"/>
+            <TextBox Grid.Column="1" Text="{Binding AdvName, UpdateSourceTrigger=PropertyChanged}" KeyDown="SearchField_OnKeyDown" Margin="0,0,12,4"/>
+            <TextBlock Grid.Column="2" Text="Номер запчасти" VerticalAlignment="Center" Margin="0,0,6,4"/>
+            <TextBox Grid.Column="3" Text="{Binding AdvCode, UpdateSourceTrigger=PropertyChanged}" KeyDown="SearchField_OnKeyDown" Margin="0,0,12,4"/>
+            <TextBlock Grid.Column="4" Text="Номер" VerticalAlignment="Center" Margin="0,0,6,4"/>
+            <StackPanel Grid.Column="5" Orientation="Horizontal" Margin="0,0,12,4">
+                <TextBox Text="{Binding AdvNumber, UpdateSourceTrigger=PropertyChanged}" KeyDown="SearchField_OnKeyDown" Width="104"/>
+                <ComboBox ItemsSource="{x:Static vm:SearchViewModel.NumberTypeFilterOptions}" SelectedItem="{Binding AdvNumberType}" Width="72" Margin="4,0,0,0"/>
+            </StackPanel>
+            <TextBlock Grid.Column="6" Text="Наличие" VerticalAlignment="Center" Margin="0,0,6,4"/>
+            <ComboBox Grid.Column="7" ItemsSource="{x:Static vm:SearchViewModel.AvailabilityFilterOptions}" SelectedItem="{Binding AdvAvailability}" Margin="0,0,0,4"/>
+
+            <TextBlock Grid.Row="1" Text="Производитель" VerticalAlignment="Center" Margin="0,0,6,4"/>
+            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding AdvManufacturer, UpdateSourceTrigger=PropertyChanged}" KeyDown="SearchField_OnKeyDown" Margin="0,0,12,4"/>
+            <TextBlock Grid.Row="1" Grid.Column="2" Text="Применимость к автомобилю" VerticalAlignment="Center" Margin="0,0,6,4"/>
+            <TextBox Grid.Row="1" Grid.Column="3" Text="{Binding AdvApplicability, UpdateSourceTrigger=PropertyChanged}" KeyDown="SearchField_OnKeyDown" Margin="0,0,12,4"/>
+            <TextBlock Grid.Row="1" Grid.Column="4" Text="Диаметр, мм" VerticalAlignment="Center" Margin="0,0,6,4"/>
+            <TextBox Grid.Row="1" Grid.Column="5" Text="{Binding AdvDiameter, UpdateSourceTrigger=PropertyChanged}" KeyDown="SearchField_OnKeyDown" Margin="0,0,12,4"/>
+            <TextBlock Grid.Row="1" Grid.Column="6" Text="Толщина, мм" VerticalAlignment="Center" Margin="0,0,6,4"/>
+            <TextBox Grid.Row="1" Grid.Column="7" Text="{Binding AdvThickness, UpdateSourceTrigger=PropertyChanged}" KeyDown="SearchField_OnKeyDown" Margin="0,0,0,4"/>
+
+            <TextBlock Grid.Row="2" Text="Ширина, мм" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding AdvWidth, UpdateSourceTrigger=PropertyChanged}" KeyDown="SearchField_OnKeyDown" Margin="0,0,12,0"/>
+            <TextBlock Grid.Row="2" Grid.Column="2" Text="Разброс параметров, %" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <TextBox Grid.Row="2" Grid.Column="3" Text="{Binding AdvTolerance, UpdateSourceTrigger=PropertyChanged}" KeyDown="SearchField_OnKeyDown" Width="80" HorizontalAlignment="Left"/>
+        </Grid>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,4">
+            <Button Content="Найти" Command="{Binding FindCommand}" Margin="0,0,8,0"/>
+            <Button Content="Копировать" Command="{Binding CopyCommand}" Margin="0,0,16,0"/>
+            <TextBlock Text="{Binding CounterText}" VerticalAlignment="Center" Margin="0,0,16,0"/>
+            <TextBlock Text="{Binding CatalogInfoText}" VerticalAlignment="Center"/>
+        </StackPanel>
+
+        <DataGrid Grid.Row="3" ItemsSource="{Binding Rows}" IsReadOnly="True" AutoGenerateColumns="False"
+                  SelectionMode="Single" MouseDoubleClick="ResultsGrid_OnMouseDoubleClick">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Номер запчасти" Binding="{Binding Item.Code}" Width="110"/>
+                <DataGridTextColumn Header="Наименование" Binding="{Binding Item.Name}" Width="200"/>
+                <DataGridTextColumn Header="Производитель" Binding="{Binding Item.Manufacturer}" Width="130"/>
+                <DataGridTextColumn Header="Применимость к автомобилю" Binding="{Binding Item.CarApplicability}" Width="200"/>
+                <DataGridTextColumn Header="Ед." Binding="{Binding UnitDisplay}" Width="50"/>
+                <DataGridTextColumn Header="Диаметр, мм" Binding="{Binding Item.Diameter}" Width="80"/>
+                <DataGridTextColumn Header="Толщина, мм" Binding="{Binding Item.Thickness}" Width="80"/>
+                <DataGridTextColumn Header="Ширина, мм" Binding="{Binding Item.Width}" Width="80"/>
+                <DataGridTextColumn Header="Текущий остаток" Binding="{Binding Stock}" Width="100"/>
+                <DataGridTemplateColumn Header="Статус наличия" Width="110">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Status}" Style="{StaticResource StatusTextStyle}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Тип результата" Binding="{Binding ResultTypeDisplay}" Width="130"/>
+                <DataGridTextColumn Header="Найденный или общий номер" Binding="{Binding MatchedNumber}" Width="180"/>
+                <DataGridTemplateColumn Header="Операции" Width="160">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Приход" Margin="0,0,4,0"
+                                        Command="{Binding DataContext.OperateReceiptCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                        CommandParameter="{Binding}"/>
+                                <Button Content="Расход"
+                                        Command="{Binding DataContext.OperateIssueCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                        CommandParameter="{Binding}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+</UserControl>

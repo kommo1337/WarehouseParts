@@ -1,0 +1,8 @@
+bin/
+obj/
+out/
+Publish/
+*.user
+*.suo
+.vs/
+TestResults/

@@ -1,0 +1,54 @@
+<Window x:Class="WarehouseParts.Views.ItemDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:data="clr-namespace:WarehouseParts.Data"
+        Title="Позиция каталога"
+        Width="460" SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="10">
+        <TextBlock Text="Номер запчасти *"/>
+        <TextBox Text="{Binding Code, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,8"/>
+        <TextBlock Text="Наименование *"/>
+        <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,8"/>
+
+        <TextBlock Text="Производитель"/>
+        <TextBox Text="{Binding Manufacturer, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,8"/>
+
+        <TextBlock Text="Единица измерения *"/>
+        <ComboBox ItemsSource="{x:Static data:DisplayTexts.Units}" SelectedItem="{Binding UnitText}" Margin="0,2,0,8"/>
+
+        <TextBlock Text="Применимость к автомобилю"/>
+        <TextBox Text="{Binding Applicability, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,8"/>
+
+        <Grid Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="Диаметр, мм"/>
+                <TextBox Text="{Binding DiameterText, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,0"/>
+            </StackPanel>
+            <StackPanel Grid.Column="2">
+                <TextBlock Text="Толщина, мм"/>
+                <TextBox Text="{Binding ThicknessText, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,0"/>
+            </StackPanel>
+            <StackPanel Grid.Column="4">
+                <TextBlock Text="Ширина, мм"/>
+                <TextBox Text="{Binding WidthText, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,0"/>
+            </StackPanel>
+        </Grid>
+
+        <TextBlock Text="Комментарий"/>
+        <TextBox Text="{Binding Comment, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,10"/>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Сохранить" Click="Save_Click" IsDefault="True" Padding="12,2" Margin="0,0,8,0"/>
+            <Button Content="Отмена" IsCancel="True" Padding="12,2"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

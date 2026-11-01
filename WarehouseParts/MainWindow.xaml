@@ -1,0 +1,21 @@
+<Window x:Class="WarehouseParts.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Учет склада запчастей"
+        Width="1280" Height="760"
+        WindowStartupLocation="CenterScreen">
+    <DockPanel>
+        <ListBox x:Name="MenuList"
+                 DockPanel.Dock="Left"
+                 Width="170"
+                 FontSize="14"
+                 SelectionChanged="MenuList_OnSelectionChanged">
+            <ListBoxItem Content="Поиск"/>
+            <ListBoxItem Content="Каталог"/>
+            <ListBoxItem Content="Журнал"/>
+            <ListBoxItem Content="Инвентаризация"/>
+            <ListBoxItem Content="Настройки"/>
+        </ListBox>
+        <ContentControl x:Name="ContentHost" Margin="6"/>
+    </DockPanel>
+</Window>

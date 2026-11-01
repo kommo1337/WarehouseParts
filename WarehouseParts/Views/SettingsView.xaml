@@ -1,0 +1,15 @@
+<UserControl x:Class="WarehouseParts.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Margin="8">
+        <TextBlock Text="Резервное копирование" FontWeight="Bold" Margin="0,0,0,6"/>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+            <Button Content="Создать резервную копию" Command="{Binding CreateBackupCommand}" Padding="12,2" Margin="0,0,8,0"/>
+            <Button Content="Открыть папку данных" Command="{Binding OpenDataFolderCommand}" Padding="12,2"/>
+        </StackPanel>
+
+        <TextBlock Text="Информация" FontWeight="Bold" Margin="0,0,0,6"/>
+        <TextBlock Text="{Binding DatabasePathText}" Margin="0,0,0,4"/>
+        <TextBlock Text="{Binding VersionText}"/>
+    </StackPanel>
+</UserControl>
