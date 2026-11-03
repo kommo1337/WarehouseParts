@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WarehouseParts.Data;
@@ -19,11 +20,15 @@ public class NumberRowViewModel
     public string TypeDisplay => DisplayTexts.For(Number.NumberType);
 }
 
+/// <summary>Результат диалога позиции: сохранено и id созданной позиции.</summary>
+public readonly record struct ItemDialogResult(bool Saved, int? AddedItemId);
+
 public partial class CatalogViewModel : ObservableObject
 {
     private readonly CatalogService _catalog;
     private readonly SemaphoreSlim _operationGate = new(1, 1);
     private CancellationTokenSource? _numbersCancellation;
+    private int? _lastAddedItemId;
 
     [ObservableProperty]
     private ObservableCollection<CatalogItemRow> _rows = new();
@@ -37,8 +42,8 @@ public partial class CatalogViewModel : ObservableObject
     [ObservableProperty]
     private NumberRowViewModel? _selectedNumber;
 
-    /// <summary>Диалог добавления (null) или редактирования позиции. true — данные сохранены.</summary>
-    public Func<CatalogItemRow?, Task<bool>>? OpenItemDialog { get; set; }
+    /// <summary>Диалог добавления (null) или редактирования позиции.</summary>
+    public Func<CatalogItemRow?, Task<ItemDialogResult>>? OpenItemDialog { get; set; }
 
     /// <summary>Диалог добавления (null) или редактирования выбранного номера. true — данные сохранены.</summary>
     public Func<PartNumber?, Task<bool>>? OpenNumberDialog { get; set; }
@@ -61,7 +66,16 @@ public partial class CatalogViewModel : ObservableObject
         try
         {
             var selectedId = SelectedRow?.Item.Id;
-            Rows = new ObservableCollection<CatalogItemRow>(await _catalog.GetRowsAsync());
+            var rows = new ObservableCollection<CatalogItemRow>(await _catalog.GetRowsAsync());
+            var lastAdded = _lastAddedItemId.HasValue
+                ? rows.FirstOrDefault(r => r.Item.Id == _lastAddedItemId.Value)
+                : null;
+            if (lastAdded is not null)
+            {
+                lastAdded.IsLastAdded = true;
+            }
+
+            Rows = rows;
             Numbers = new ObservableCollection<NumberRowViewModel>();
             SelectedNumber = null;
             SelectedRow = selectedId.HasValue
@@ -86,9 +100,36 @@ public partial class CatalogViewModel : ObservableObject
             return;
         }
 
-        if (await OpenItemDialog(null))
+        var result = await OpenItemDialog(null);
+        if (!result.Saved)
         {
-            await RefreshAsync();
+            return;
+        }
+
+        _lastAddedItemId = result.AddedItemId;
+        await RefreshAsync();
+        if (result.AddedItemId.HasValue)
+        {
+            SelectedRow = Rows.FirstOrDefault(r => r.Item.Id == result.AddedItemId.Value);
+        }
+    }
+
+    [RelayCommand]
+    private void CopyItemCode()
+    {
+        var code = SelectedRow?.Item.Code;
+        if (string.IsNullOrEmpty(code))
+        {
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(code);
+        }
+        catch (Exception ex)
+        {
+            DialogHelper.ShowError(ex);
         }
     }
 
@@ -100,7 +141,7 @@ public partial class CatalogViewModel : ObservableObject
             return;
         }
 
-        if (await OpenItemDialog(SelectedRow))
+        if ((await OpenItemDialog(SelectedRow)).Saved)
         {
             await RefreshAsync();
         }

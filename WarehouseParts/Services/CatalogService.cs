@@ -10,6 +10,9 @@ public class CatalogItemRow
 
     public int Stock { get; set; }
 
+    /// <summary>Подсветка последней добавленной позиции в списке.</summary>
+    public bool IsLastAdded { get; set; }
+
     public string UnitDisplay => DisplayTexts.For(Item.Unit);
 
     public string Status => StockStatus.FromStock(Stock);

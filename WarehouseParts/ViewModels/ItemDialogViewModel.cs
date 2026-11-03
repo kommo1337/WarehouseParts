@@ -36,6 +36,9 @@ public partial class ItemDialogViewModel : ObservableObject
     [ObservableProperty]
     private string _widthText = "";
 
+    /// <summary>Id созданной позиции (только при добавлении).</summary>
+    public int? SavedItemId { get; private set; }
+
     public ItemDialogViewModel(CatalogService catalog, CatalogItemRow? editRow)
     {
         _catalog = catalog;
@@ -64,7 +67,8 @@ public partial class ItemDialogViewModel : ObservableObject
             var width = ParseParameter(WidthText, "Ширина");
             if (_editRow is null)
             {
-                await _catalog.AddItemAsync(Code, Name, unit, Manufacturer, Applicability, Comment, diameter, thickness, width);
+                var item = await _catalog.AddItemAsync(Code, Name, unit, Manufacturer, Applicability, Comment, diameter, thickness, width);
+                SavedItemId = item.Id;
             }
             else
             {

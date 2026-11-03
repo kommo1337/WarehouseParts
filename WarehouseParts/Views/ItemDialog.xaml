@@ -5,10 +5,12 @@
         Title="Позиция каталога"
         Width="460" SizeToContent="Height"
         ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        FocusManager.FocusedElement="{Binding ElementName=CodeTextBox}"
         WindowStartupLocation="CenterOwner">
     <StackPanel Margin="10">
         <TextBlock Text="Номер запчасти *"/>
-        <TextBox Text="{Binding Code, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,8"/>
+        <TextBox x:Name="CodeTextBox" Text="{Binding Code, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,8"/>
         <TextBlock Text="Наименование *"/>
         <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,8"/>
 

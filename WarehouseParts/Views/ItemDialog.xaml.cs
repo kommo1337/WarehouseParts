@@ -16,6 +16,9 @@ public partial class ItemDialog : Window
         Title = editRow is null ? "Новая позиция" : "Изменение позиции";
     }
 
+    /// <summary>Id созданной позиции, если диалог завершился сохранением новой позиции.</summary>
+    public int? SavedItemId => _viewModel.SavedItemId;
+
     private async void Save_Click(object sender, RoutedEventArgs e)
     {
         var (ok, error) = await _viewModel.SaveAsync();

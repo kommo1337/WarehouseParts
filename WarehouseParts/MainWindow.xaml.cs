@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using WarehouseParts.Data;
 using WarehouseParts.Services;
 using WarehouseParts.ViewModels;
@@ -11,6 +12,7 @@ namespace WarehouseParts;
 
 public partial class MainWindow : Window
 {
+    private const int CatalogIndex = 1;
     private const int InventoryIndex = 3;
 
     private readonly List<AppDbContext> _contexts = new();
@@ -141,7 +143,8 @@ public partial class MainWindow : Window
             var dialogOperations = new OperationsService(dialogContext);
             var dialogCatalog = new CatalogService(dialogContext, dialogOperations);
             var dialog = new ItemDialog(dialogCatalog, row) { Owner = this };
-            return Task.FromResult(AttachContext(dialog, dialogContext).ShowDialog() == true);
+            var saved = AttachContext(dialog, dialogContext).ShowDialog() == true;
+            return Task.FromResult(new ItemDialogResult(saved, dialog.SavedItemId));
         };
         viewModel.OpenNumberDialog = number =>
         {
@@ -259,6 +262,22 @@ public partial class MainWindow : Window
                 inventory.CancelPending();
                 break;
         }
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (e.Key == Key.N
+            && Keyboard.Modifiers == ModifierKeys.Control
+            && _currentIndex == CatalogIndex
+            && _views[CatalogIndex]?.DataContext is CatalogViewModel vm
+            && vm.AddItemCommand.CanExecute(null))
+        {
+            vm.AddItemCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
+        base.OnKeyDown(e);
     }
 
     protected override void OnClosing(CancelEventArgs e)
