@@ -5,20 +5,22 @@
         Title="Номер запчасти"
         Width="420" SizeToContent="Height"
         ResizeMode="NoResize"
-        WindowStartupLocation="CenterOwner">
-    <StackPanel Margin="10">
-        <TextBlock Text="Тип номера"/>
-        <ComboBox ItemsSource="{x:Static data:DisplayTexts.NumberTypes}" SelectedItem="{Binding NumberTypeText}" Margin="0,2,0,8"/>
+        WindowStartupLocation="CenterOwner"
+        FocusManager.FocusedElement="{Binding ElementName=NumberBox}"
+        KeyDown="NumberDialog_OnKeyDown">
+    <StackPanel Margin="16">
+        <TextBlock Text="Тип номера" Style="{StaticResource HintTextStyle}"/>
+        <ComboBox ItemsSource="{x:Static data:DisplayTexts.NumberTypes}" SelectedItem="{Binding NumberTypeText}" Margin="0,3,0,10"/>
 
-        <TextBlock Text="Номер"/>
-        <TextBox Text="{Binding NumberText, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,8"/>
+        <TextBlock Text="Номер" Style="{StaticResource HintTextStyle}"/>
+        <TextBox x:Name="NumberBox" Text="{Binding NumberText, UpdateSourceTrigger=PropertyChanged}" Margin="0,3,0,10"/>
 
-        <TextBlock Text="Комментарий"/>
-        <TextBox Text="{Binding Comment, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,10"/>
+        <TextBlock Text="Комментарий" Style="{StaticResource HintTextStyle}"/>
+        <TextBox Text="{Binding Comment, UpdateSourceTrigger=PropertyChanged}" Margin="0,3,0,14"/>
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Content="Сохранить" Click="Save_Click" IsDefault="True" Padding="12,2" Margin="0,0,8,0"/>
-            <Button Content="Отмена" IsCancel="True" Padding="12,2"/>
+            <Button Content="Сохранить" Click="Save_Click" IsDefault="True" Style="{StaticResource PrimaryButtonStyle}" Padding="18,5" Margin="0,0,8,0" ToolTip="Сохранить номер (Enter или Ctrl+Enter)"/>
+            <Button Content="Отмена" IsCancel="True" Padding="18,5" ToolTip="Отмена (Esc)"/>
         </StackPanel>
     </StackPanel>
 </Window>

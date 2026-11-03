@@ -152,6 +152,18 @@ public class OperationsService
     public async Task<string> GetStockStatusAsync(int itemId, CancellationToken cancellationToken = default)
         => StockStatus.FromStock(await GetStockAsync(itemId, cancellationToken));
 
+    /// <summary>Последние операции позиции для панели предпросмотра: новые первыми.</summary>
+    public async Task<List<Operation>> GetRecentOperationsForItemAsync(
+        int itemId,
+        int count = 10,
+        CancellationToken cancellationToken = default)
+        => await _db.Operations.AsNoTracking()
+            .Include(o => o.Item)
+            .Where(o => o.ItemId == itemId)
+            .OrderByDescending(o => o.Id)
+            .Take(count)
+            .ToListAsync(cancellationToken);
+
     /// <summary>
     /// Все операции журнала с расчетными остатками после операции.
     /// Порядок проведения определяется возрастанием Id; новые операции возвращаются первыми.

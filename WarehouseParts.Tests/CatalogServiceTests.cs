@@ -184,6 +184,49 @@ public class CatalogServiceTests
     }
 
     [Fact]
+    public async Task ФильтрыКачества_ОтбираютПозицииСНезаполненнымиДанными()
+    {
+        await using var db = TestDb.CreateContext(out var connection);
+        await using (connection)
+        {
+            var service = new CatalogService(db, new OperationsService(db));
+            var withOem = await service.AddItemAsync("OEM-01", "С OEM", UnitType.Piece, "Bosch", "VW Golf", null);
+            await service.AddNumberAsync(withOem.Id, NumberType.Oem, "12345", null);
+            await service.AddItemAsync("NO-OEM", "Без OEM", UnitType.Piece, "Bosch", "VW Golf", null);
+            await service.AddItemAsync("NO-MFR", "Без производителя", UnitType.Piece, null, "VW Golf", null);
+            await service.AddItemAsync("NO-APP", "Без применимости", UnitType.Piece, "Bosch", null, null);
+
+            var withoutOem = await service.GetRowsAsync(CatalogQualityFilter.WithoutOem);
+            Assert.Equal(3, withoutOem.Count);
+            Assert.DoesNotContain(withoutOem, r => r.Item.Code == "OEM-01");
+            Assert.Equal("NO-MFR", Assert.Single(await service.GetRowsAsync(CatalogQualityFilter.WithoutManufacturer)).Item.Code);
+            Assert.Equal("NO-APP", Assert.Single(await service.GetRowsAsync(CatalogQualityFilter.WithoutApplicability)).Item.Code);
+            Assert.Equal(4, (await service.GetRowsAsync(CatalogQualityFilter.All)).Count);
+
+            var counts = await service.GetQualityCountsAsync();
+            Assert.Equal(4, counts.Total);
+            Assert.Equal(1, counts.WithoutApplicability);
+            Assert.Equal(1, counts.WithoutManufacturer);
+            Assert.Equal(3, counts.WithoutOem);
+        }
+    }
+
+    [Fact]
+    public async Task БезOem_УчитываетТолькоНомераТипаOem()
+    {
+        await using var db = TestDb.CreateContext(out var connection);
+        await using (connection)
+        {
+            var service = new CatalogService(db, new OperationsService(db));
+            var item = await service.AddItemAsync("ART-01", "Только артикул", UnitType.Piece, null, null, null);
+            await service.AddNumberAsync(item.Id, NumberType.Article, "A-100", null);
+
+            // Артикул есть, но OEM нет — позиция должна попадать под фильтр.
+            Assert.Single(await service.GetRowsAsync(CatalogQualityFilter.WithoutOem));
+        }
+    }
+
+    [Fact]
     public async Task ПоискПоКоду_ТочноеСовпадениеБезРегистра()
     {
         await using var db = TestDb.CreateContext(out var connection);

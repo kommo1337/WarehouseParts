@@ -1,0 +1,140 @@
+<Window x:Class="WarehouseParts.Views.HotkeyHelpWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Горячие клавиши"
+        Width="520" SizeToContent="Height"
+        MinWidth="480"
+        Background="{StaticResource WindowBackgroundBrush}"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        KeyDown="HotkeyHelpWindow_OnKeyDown">
+    <Window.Resources>
+        <Style x:Key="HotkeyGridStyle" TargetType="Grid">
+            <Setter Property="Margin" Value="0,0,0,16"/>
+        </Style>
+    </Window.Resources>
+    <Border Padding="20" Background="{StaticResource SurfaceBrush}" Margin="12">
+        <StackPanel>
+            <TextBlock Text="Горячие клавиши" Style="{StaticResource PageTitleStyle}" Margin="0,0,0,4"/>
+            <TextBlock Text="Работайте без мыши: разделы, поиск и действия доступны с клавиатуры."
+                       Style="{StaticResource PageDescriptionStyle}" Margin="0,0,0,16"/>
+
+            <TextBlock Text="Разделы" Style="{StaticResource SectionTitleStyle}" Margin="0,0,0,8"/>
+            <Grid Style="{StaticResource HotkeyGridStyle}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="F1" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="Поиск"/>
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="F2" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Text="Каталог"/>
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="F3" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Text="Журнал"/>
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="F4" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="3" Grid.Column="2" Text="Инвентаризация"/>
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="F5" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="4" Grid.Column="2" Text="Настройки"/>
+            </Grid>
+
+            <TextBlock Text="Действия" Style="{StaticResource SectionTitleStyle}" Margin="0,0,0,8"/>
+            <Grid Style="{StaticResource HotkeyGridStyle}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Ctrl+N" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="Новая позиция (из любого раздела)"/>
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Ctrl+F" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Text="Перейти к поиску и выделить запрос"/>
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Ctrl+R" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Text="Приход по выбранной позиции"/>
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Ctrl+I" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="3" Grid.Column="2" Text="Расход по выбранной позиции"/>
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Ctrl+Enter" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="4" Grid.Column="2" Text="Основное сохранение в диалоге"/>
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="Ctrl+S" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="5" Grid.Column="2" Text="Сохранить форму позиции из любого поля"/>
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="Esc" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="6" Grid.Column="2" Text="Назад / закрыть"/>
+                <TextBlock Grid.Row="7" Grid.Column="0" Text="Ctrl+C" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="7" Grid.Column="2" Text="Копировать ячейку или строку в таблице"/>
+                <TextBlock Grid.Row="8" Grid.Column="0" Text="Ctrl+/" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="8" Grid.Column="2" Text="Эта справка"/>
+            </Grid>
+
+            <TextBlock Text="Поиск и результаты" Style="{StaticResource SectionTitleStyle}" Margin="0,0,0,8"/>
+            <Grid Style="{StaticResource HotkeyGridStyle}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="↓ / ↑" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="Из поля — в таблицу; в таблице — по строкам"/>
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Enter" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Text="Выбрать лучший результат / открыть карточку"/>
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Tab" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Text="Перейти к действиям карточки"/>
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Esc / Ctrl+←" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="3" Grid.Column="2" Text="Вернуться к результатам"/>
+            </Grid>
+
+            <TextBlock Text="Форма позиции" Style="{StaticResource SectionTitleStyle}" Margin="0,0,0,8"/>
+            <Grid Style="{StaticResource HotkeyGridStyle}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="F1" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="Основные данные"/>
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="F2" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Text="OEM и другие номера"/>
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="F3" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Text="Начальный остаток (новая позиция)"/>
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Ctrl+Enter" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="3" Grid.Column="2" Text="В поле списка — разобрать номера; иначе — сохранить"/>
+            </Grid>
+
+            <TextBlock Text="Операция (приход/расход)" Style="{StaticResource SectionTitleStyle}" Margin="0,0,0,8"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Enter" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="Сохранить операцию"/>
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Esc" FontWeight="SemiBold"/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Text="Отмена"/>
+            </Grid>
+        </StackPanel>
+    </Border>
+</Window>

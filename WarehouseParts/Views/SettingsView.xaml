@@ -1,15 +1,73 @@
 <UserControl x:Class="WarehouseParts.Views.SettingsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <StackPanel Margin="8">
-        <TextBlock Text="Резервное копирование" FontWeight="Bold" Margin="0,0,0,6"/>
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
-            <Button Content="Создать резервную копию" Command="{Binding CreateBackupCommand}" Padding="12,2" Margin="0,0,8,0"/>
-            <Button Content="Открыть папку данных" Command="{Binding OpenDataFolderCommand}" Padding="12,2"/>
-        </StackPanel>
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:WarehouseParts.Ui">
+    <UserControl.Resources>
+        <ui:StringToVisibilityConverter x:Key="NonEmptyStringToVisibility"/>
+        <ui:InvertedBooleanConverter x:Key="InvertedBooleanConverter"/>
+    </UserControl.Resources>
 
-        <TextBlock Text="Информация" FontWeight="Bold" Margin="0,0,0,6"/>
-        <TextBlock Text="{Binding DatabasePathText}" Margin="0,0,0,4"/>
-        <TextBlock Text="{Binding VersionText}"/>
+    <StackPanel Margin="2">
+        <Border Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderStrongBrush}"
+                BorderThickness="1"
+                CornerRadius="3"
+                Padding="14"
+                Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Резервное копирование" Style="{StaticResource SectionTitleStyle}" Margin="0,0,0,8"/>
+                <TextBlock Text="Копии хранятся в папке Backups рядом с базой данных. Сохраняются последние 10 копий."
+                           Style="{StaticResource PageDescriptionStyle}"
+                           Margin="0,0,0,12"/>
+                <WrapPanel>
+                    <Button Content="Создать резервную копию"
+                            Command="{Binding CreateBackupCommand}"
+                            IsEnabled="{Binding IsCreatingBackup, Converter={StaticResource InvertedBooleanConverter}}"
+                            Style="{StaticResource PrimaryButtonStyle}"
+                            Padding="16,5"
+                            Margin="0,0,8,6"/>
+                    <Button Content="Открыть папку данных" Command="{Binding OpenDataFolderCommand}" Padding="14,5" Margin="0,0,8,6"/>
+                    <Button Content="Открыть папку копии" Command="{Binding OpenBackupFolderCommand}" IsEnabled="{Binding CanOpenBackupFolder}" Padding="14,5" Margin="0,0,0,6"/>
+                </WrapPanel>
+                <TextBlock Text="Создание резервной копии…"
+                           Foreground="{StaticResource AccentBrush}"
+                           Margin="0,6,0,0"
+                           Visibility="{Binding IsCreatingBackup, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                <TextBlock Text="{Binding BackupResultText}"
+                           Style="{StaticResource HintTextStyle}"
+                           Margin="0,6,0,0"
+                           Visibility="{Binding BackupResultText, Converter={StaticResource NonEmptyStringToVisibility}}"/>
+            </StackPanel>
+        </Border>
+
+        <Border Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderStrongBrush}"
+                BorderThickness="1"
+                CornerRadius="3"
+                Padding="14"
+                Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Интерфейс" Style="{StaticResource SectionTitleStyle}" Margin="0,0,0,8"/>
+                <TextBlock Text="Видимость, ширина и порядок столбцов таблиц сохраняются отдельно для каждого раздела и восстанавливаются при запуске."
+                           Style="{StaticResource PageDescriptionStyle}"
+                           Margin="0,0,0,12"/>
+                <Button Content="Сбросить настройки таблиц"
+                        Command="{Binding ResetInterfaceSettingsCommand}"
+                        Padding="14,5"
+                        HorizontalAlignment="Left"/>
+            </StackPanel>
+        </Border>
+
+        <Border Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderStrongBrush}"
+                BorderThickness="1"
+                CornerRadius="3"
+                Padding="14">
+            <StackPanel>
+                <TextBlock Text="Информация" Style="{StaticResource SectionTitleStyle}" Margin="0,0,0,8"/>
+                <TextBlock Text="{Binding DatabasePathText}" Margin="0,0,0,6" TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding VersionText}" Style="{StaticResource HintTextStyle}"/>
+            </StackPanel>
+        </Border>
     </StackPanel>
 </UserControl>

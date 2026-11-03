@@ -1,17 +1,21 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Text;
 using System.Windows;
+using System.Windows.Data;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WarehouseParts.Data;
 using WarehouseParts.Services;
+using WarehouseParts.Ui;
 
 namespace WarehouseParts.ViewModels;
 
 public partial class SearchViewModel : ObservableObject
 {
     private readonly SearchService _search;
+    private readonly UiSettingsService? _uiSettings;
     private readonly DispatcherTimer _debounce;
     private readonly SemaphoreSlim _operationGate = new(1, 1);
     private CancellationTokenSource? _searchCancellation;
@@ -60,37 +64,118 @@ public partial class SearchViewModel : ObservableObject
     private ObservableCollection<SearchResultRow> _rows = new();
 
     [ObservableProperty]
+    private ListCollectionView _rowsView = new(new ObservableCollection<SearchResultRow>());
+
+    [ObservableProperty]
+    private SearchResultRow? _selectedRow;
+
+    [ObservableProperty]
+    private string _confirmationText = "";
+
+    [ObservableProperty]
+    private string _bulkInputText = "";
+
+    [ObservableProperty]
+    private bool _showBulkChoice;
+
+    [ObservableProperty]
+    private bool _showMassResult;
+
+    [ObservableProperty]
+    private ObservableCollection<string> _massSummaryLines = new();
+
+    [ObservableProperty]
+    private string _massNotFoundText = "";
+
+    [ObservableProperty]
+    private bool _previewVisible = true;
+
+    public bool IsPreviewHidden => !PreviewVisible;
+
+    [ObservableProperty]
     private string _counterText = "Найдено: 0 (0 прямых, 0 аналогов)";
 
     [ObservableProperty]
     private string _catalogInfoText = "";
 
+    [ObservableProperty]
+    private bool _isSearching;
+
+    [ObservableProperty]
+    private bool _hasSearched;
+
+    [ObservableProperty]
+    private string _searchStatusText = "";
+
+    [ObservableProperty]
+    private string _searchErrorText = "";
+
+    [ObservableProperty]
+    private bool _hasActiveFilters;
+
+    [ObservableProperty]
+    private string _activeFilterSummary = "";
+
+    [ObservableProperty]
+    private int _catalogTotal;
+
+    public bool IsSearchError => SearchErrorText.Length > 0;
+
+    public bool IsEmptyResult => HasSearched && Rows.Count == 0 && !IsSearching && !ShowMassResult;
+
+    public bool HasSelectedRow => SelectedRow is not null;
+
+    public string EmptyStateTitle => CatalogTotal == 0
+        ? "Каталог пока пуст"
+        : "Ничего не найдено";
+
+    public string EmptyStateDescription => CatalogTotal == 0
+        ? "Добавьте первую запчасть, затем заполните её номера и остаток."
+        : HasActiveFilters
+            ? "Измените условия поиска или сбросьте фильтры."
+            : "Попробуйте ввести другой код, наименование, производителя, применимость или номер.";
+
     public static IReadOnlyList<string> NumberTypeFilterOptions => DisplayTexts.NumberTypeFilters;
 
     public static IReadOnlyList<string> AvailabilityFilterOptions => DisplayTexts.AvailabilityFilters;
 
-    /// <summary>Режим «Расширенный поиск» — инверсия IsQuickMode для второго переключателя.</summary>
     public bool IsAdvancedMode
     {
         get => !IsQuickMode;
         set => IsQuickMode = !value;
     }
 
-    /// <summary>Открывает форму операции с предзаполненной запчастью и типом; возвращает управление после сохранения.</summary>
+    public bool CanClearQuick => QuickQuery.Length > 0;
+
     public Func<Item, OperationType, Task>? OpenOperation { get; set; }
 
-    /// <summary>Открывает окно «Номера и аналоги позиции».</summary>
     public Func<Item, Task>? OpenItemNumbers { get; set; }
 
-    public SearchViewModel(SearchService search)
+    public Func<Task>? OpenCatalog { get; set; }
+
+    /// <summary>Открывает форму новой позиции со списком OEM, вставленным в массовое поле.</summary>
+    public Func<IReadOnlyList<string>, Task>? OpenAddItemWithNumbers { get; set; }
+
+    /// <summary>Открывает форму редактирования позиции.</summary>
+    public Func<Item, Task>? OpenEditItem { get; set; }
+
+    /// <summary>Карточка боковой панели предпросмотра; null, если сервисы номеров недоступны (тесты).</summary>
+    public ItemDetailsViewModel? Details { get; }
+
+    public SearchViewModel(SearchService search, ItemDetailsViewModel? details = null, UiSettingsService? uiSettings = null)
     {
         _search = search;
+        Details = details;
+        _uiSettings = uiSettings;
+        _previewVisible = uiSettings?.PreviewVisible ?? true;
+        RowsView = CreateRowsView(Rows);
         _debounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
         _debounce.Tick += async (_, _) =>
         {
             _debounce.Stop();
             await ExecuteSearchAsync();
         };
+        UpdateFilterState();
     }
 
     public async Task RefreshIndicatorsAsync()
@@ -99,6 +184,8 @@ public partial class SearchViewModel : ObservableObject
         try
         {
             var counts = await _search.GetCatalogCountsAsync();
+            CatalogTotal = counts.Total;
+            UpdateResultState();
             CatalogInfoText = $"Всего позиций: {counts.Total}   В наличии: {counts.InStock}   Нет в наличии: {counts.OutOfStock}";
         }
         catch (Exception ex)
@@ -111,7 +198,6 @@ public partial class SearchViewModel : ObservableObject
         }
     }
 
-    /// <summary>Обновляет данные экрана при возврате в раздел: результаты и показатели по актуальным данным.</summary>
     public async Task RefreshOnShowAsync()
     {
         await ExecuteSearchAsync();
@@ -132,6 +218,30 @@ public partial class SearchViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void ClearQuick()
+    {
+        QuickQuery = string.Empty;
+    }
+
+    [RelayCommand]
+    private async Task ResetFiltersAsync()
+    {
+        QuickQuery = string.Empty;
+        AdvName = string.Empty;
+        AdvCode = string.Empty;
+        AdvNumber = string.Empty;
+        AdvNumberType = DisplayTexts.NumberTypeFilters[0];
+        AdvManufacturer = string.Empty;
+        AdvApplicability = string.Empty;
+        AdvAvailability = DisplayTexts.AvailabilityFilters[0];
+        AdvDiameter = string.Empty;
+        AdvThickness = string.Empty;
+        AdvWidth = string.Empty;
+        AdvTolerance = "0";
+        await ExecuteSearchAsync();
+    }
+
+    [RelayCommand]
     private async Task OperateReceiptAsync(SearchResultRow? row)
     {
         await OperateAsync(row, OperationType.Receipt);
@@ -144,8 +254,9 @@ public partial class SearchViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task OpenNumbersAsync(SearchResultRow? row)
+    private async Task OpenNumbersAsync()
     {
+        var row = SelectedRow;
         if (row is null || OpenItemNumbers is null)
         {
             return;
@@ -155,8 +266,145 @@ public partial class SearchViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private async Task GoToCatalogAsync()
+    {
+        if (OpenCatalog is not null)
+        {
+            await OpenCatalog();
+        }
+    }
+
+    [RelayCommand]
+    private async Task SearchAllNumbersAsync()
+    {
+        var numbers = NumberListParser.Parse(BulkInputText);
+        if (numbers.Count == 0)
+        {
+            return;
+        }
+
+        ShowBulkChoice = false;
+        IsSearching = true;
+        SearchStatusText = "Массовый поиск…";
+        try
+        {
+            var result = await _search.SearchManyAsync(numbers);
+            BuildMassSummary(result);
+            ShowMassResult = true;
+            QuickQuery = string.Empty;
+            HasSearched = false;
+            Rows = new ObservableCollection<SearchResultRow>();
+            RowsView = CreateRowsView(Rows);
+            ConfirmationText = string.Empty;
+            UpdateResultState();
+        }
+        catch (Exception ex)
+        {
+            DialogHelper.ShowError(ex);
+        }
+        finally
+        {
+            IsSearching = false;
+            SearchStatusText = string.Empty;
+        }
+    }
+
+    [RelayCommand]
+    private async Task AddAsOemListAsync()
+    {
+        var numbers = NumberListParser.Parse(BulkInputText);
+        if (numbers.Count == 0 || OpenAddItemWithNumbers is null)
+        {
+            return;
+        }
+
+        ShowBulkChoice = false;
+        await OpenAddItemWithNumbers(numbers);
+    }
+
+    [RelayCommand]
+    private void CloseMassResult()
+    {
+        ShowMassResult = false;
+        MassSummaryLines = new ObservableCollection<string>();
+        MassNotFoundText = string.Empty;
+        UpdateResultState();
+    }
+
+    [RelayCommand]
+    private void CopyMassResult()
+    {
+        var builder = new StringBuilder();
+        foreach (var line in MassSummaryLines)
+        {
+            builder.AppendLine(line);
+        }
+
+        if (MassNotFoundText.Length > 0)
+        {
+            builder.AppendLine(MassNotFoundText);
+        }
+
+        if (builder.Length == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(builder.ToString());
+            AppFeedback.Send("Сводка массового поиска скопирована");
+        }
+        catch (Exception ex)
+        {
+            DialogHelper.ShowError(ex);
+        }
+    }
+
+    [RelayCommand]
+    private void TogglePreview()
+    {
+        PreviewVisible = !PreviewVisible;
+        if (_uiSettings is not null)
+        {
+            _uiSettings.PreviewVisible = PreviewVisible;
+        }
+    }
+
+    private void BuildMassSummary(MassSearchResult result)
+    {
+        var lines = new List<string>();
+        foreach (var entry in result.Entries)
+        {
+            var parts = new List<string>();
+            if (entry.DirectCount > 0)
+            {
+                parts.Add($"{entry.DirectCount} точных");
+            }
+
+            if (entry.AnalogCount > 0)
+            {
+                parts.Add($"{entry.AnalogCount} аналогов");
+            }
+
+            lines.Add($"{entry.RawNumber}: найдено {string.Join(", ", parts)}");
+        }
+
+        MassSummaryLines = new ObservableCollection<string>(lines);
+        MassNotFoundText = result.NotFoundNumbers.Count > 0
+            ? $"Не найдено: {string.Join(", ", result.NotFoundNumbers)}"
+            : string.Empty;
+    }
+
+    [RelayCommand]
     private void Copy()
     {
+        if (Rows.Count == 0)
+        {
+            AppFeedback.Send("Нет данных для копирования");
+            return;
+        }
+
         var builder = new StringBuilder();
         builder.AppendLine("Номер запчасти\tНаименование\tПроизводитель\tПрименимость к автомобилю\tЕдиница измерения\tТекущий остаток\tСтатус наличия\tТип результата\tНайденный или общий номер");
         foreach (var row in Rows)
@@ -169,6 +417,7 @@ public partial class SearchViewModel : ObservableObject
         try
         {
             Clipboard.SetText(builder.ToString());
+            AppFeedback.Send($"Скопировано позиций: {Rows.Count}");
         }
         catch (Exception ex)
         {
@@ -227,6 +476,11 @@ public partial class SearchViewModel : ObservableObject
                 };
             }
 
+            SearchErrorText = string.Empty;
+            OnPropertyChanged(nameof(IsSearchError));
+            IsSearching = true;
+            SearchStatusText = "Поиск…";
+
             await _operationGate.WaitAsync(cancellationToken);
             try
             {
@@ -236,7 +490,7 @@ public partial class SearchViewModel : ObservableObject
                 cancellationToken.ThrowIfCancellationRequested();
                 if (version == _searchVersion)
                 {
-                    ApplyResult(result);
+                    ApplyResult(result, isQuickMode, quickQuery);
                 }
             }
             finally
@@ -249,20 +503,136 @@ public partial class SearchViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            if (version == _searchVersion)
+            {
+                SearchErrorText = "Не удалось выполнить поиск. Попробуйте ещё раз.";
+                OnPropertyChanged(nameof(IsSearchError));
+            }
             DialogHelper.ShowError(ex);
+        }
+        finally
+        {
+            if (version == _searchVersion)
+            {
+                IsSearching = false;
+                SearchStatusText = string.Empty;
+            }
         }
     }
 
-    private void ApplyResult(SearchResult result)
+    private void ApplyResult(SearchResult result, bool isQuickMode, string quickQuery)
     {
+        var selectedItemId = SelectedRow?.Item.Id;
         Rows = new ObservableCollection<SearchResultRow>(result.Rows);
+        RowsView = CreateRowsView(Rows);
         CounterText = $"Найдено: {result.Total} ({result.DirectCount} прямых, {result.AnalogCount} аналогов)";
+        HasSearched = true;
+        SearchErrorText = string.Empty;
+        OnPropertyChanged(nameof(IsSearchError));
+        ConfirmationText = BuildConfirmationText(result, isQuickMode, quickQuery);
+        UpdateResultState();
+        SelectedRow = selectedItemId.HasValue
+            ? result.Rows.FirstOrDefault(r => r.Item.Id == selectedItemId.Value)
+            : null;
+        OnPropertyChanged(nameof(HasSelectedRow));
+    }
+
+    private static ListCollectionView CreateRowsView(ObservableCollection<SearchResultRow> rows)
+    {
+        var view = new ListCollectionView(rows);
+        view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(SearchResultRow.ResultTypeDisplay)));
+        return view;
+    }
+
+    private static string BuildConfirmationText(SearchResult result, bool isQuickMode, string quickQuery)
+    {
+        if (isQuickMode)
+        {
+            var query = quickQuery.Trim();
+            if (query.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            var matchedByNumber = result.Rows.Any(r =>
+                r.ResultType == SearchResultType.DirectMatch && r.MatchedNumber.Length > 0);
+            return matchedByNumber
+                ? $"Найдено по OEM: {query}"
+                : $"Найдено по запросу: «{query}»";
+        }
+
+        return result.Total > 0 ? "Найдено по условиям расширенного поиска" : string.Empty;
+    }
+
+    private void UpdateResultState()
+    {
+        OnPropertyChanged(nameof(IsEmptyResult));
+        OnPropertyChanged(nameof(EmptyStateTitle));
+        OnPropertyChanged(nameof(EmptyStateDescription));
     }
 
     private void RestartDebounce()
     {
         _debounce.Stop();
         _debounce.Start();
+    }
+
+    private void UpdateFilterState()
+    {
+        var filters = new List<string>();
+        if (QuickQuery.Trim().Length > 0)
+        {
+            filters.Add($"запрос «{QuickQuery.Trim()}»");
+        }
+        if (AdvName.Trim().Length > 0)
+        {
+            filters.Add($"наименование «{AdvName.Trim()}»");
+        }
+        if (AdvCode.Trim().Length > 0)
+        {
+            filters.Add($"код «{AdvCode.Trim()}»");
+        }
+        if (AdvNumber.Trim().Length > 0)
+        {
+            filters.Add($"номер «{AdvNumber.Trim()}»");
+        }
+        if (AdvNumberType != DisplayTexts.NumberTypeFilters[0])
+        {
+            filters.Add($"тип номера: {AdvNumberType}");
+        }
+        if (AdvManufacturer.Trim().Length > 0)
+        {
+            filters.Add($"производитель «{AdvManufacturer.Trim()}»");
+        }
+        if (AdvApplicability.Trim().Length > 0)
+        {
+            filters.Add($"применимость «{AdvApplicability.Trim()}»");
+        }
+        if (AdvAvailability != DisplayTexts.AvailabilityFilters[0])
+        {
+            filters.Add(AdvAvailability);
+        }
+        if (AdvDiameter.Trim().Length > 0)
+        {
+            filters.Add($"диаметр {AdvDiameter.Trim()} мм");
+        }
+        if (AdvThickness.Trim().Length > 0)
+        {
+            filters.Add($"толщина {AdvThickness.Trim()} мм");
+        }
+        if (AdvWidth.Trim().Length > 0)
+        {
+            filters.Add($"ширина {AdvWidth.Trim()} мм");
+        }
+        if (AdvTolerance.Trim().Length > 0 && AdvTolerance.Trim() != "0")
+        {
+            filters.Add($"разброс {AdvTolerance.Trim()}%");
+        }
+
+        HasActiveFilters = filters.Count > 0;
+        ActiveFilterSummary = filters.Count > 0 ? string.Join("; ", filters) : string.Empty;
+        OnPropertyChanged(nameof(CanClearQuick));
+        UpdateResultState();
     }
 
     private static NumberTypeFilter ParseNumberFilter(string text) => text switch
@@ -318,21 +688,57 @@ public partial class SearchViewModel : ObservableObject
         return false;
     }
 
-    partial void OnQuickQueryChanged(string value) => RestartDebounce();
+    partial void OnQuickQueryChanged(string value)
+    {
+        UpdateFilterState();
+        var looksLikeList = IsQuickMode && NumberListParser.LooksLikeList(value);
+        if (looksLikeList)
+        {
+            BulkInputText = value;
+        }
+
+        ShowBulkChoice = looksLikeList;
+        RestartDebounce();
+    }
+
     partial void OnIsQuickModeChanged(bool value)
     {
         OnPropertyChanged(nameof(IsAdvancedMode));
+        UpdateFilterState();
         RestartDebounce();
     }
-    partial void OnAdvNameChanged(string value) => RestartDebounce();
-    partial void OnAdvCodeChanged(string value) => RestartDebounce();
-    partial void OnAdvNumberChanged(string value) => RestartDebounce();
-    partial void OnAdvNumberTypeChanged(string value) => RestartDebounce();
-    partial void OnAdvManufacturerChanged(string value) => RestartDebounce();
-    partial void OnAdvApplicabilityChanged(string value) => RestartDebounce();
-    partial void OnAdvAvailabilityChanged(string value) => RestartDebounce();
-    partial void OnAdvDiameterChanged(string value) => RestartDebounce();
-    partial void OnAdvThicknessChanged(string value) => RestartDebounce();
-    partial void OnAdvWidthChanged(string value) => RestartDebounce();
-    partial void OnAdvToleranceChanged(string value) => RestartDebounce();
+
+    partial void OnIsSearchingChanged(bool value) => UpdateResultState();
+
+    partial void OnSelectedRowChanged(SearchResultRow? value)
+    {
+        OnPropertyChanged(nameof(HasSelectedRow));
+        if (Details is not null)
+        {
+            if (value is null)
+            {
+                Details.Clear();
+            }
+            else
+            {
+                _ = Details.LoadAsync(value.Item, value.Stock);
+            }
+        }
+    }
+
+    partial void OnShowMassResultChanged(bool value) => UpdateResultState();
+
+    partial void OnPreviewVisibleChanged(bool value) => OnPropertyChanged(nameof(IsPreviewHidden));
+
+    partial void OnAdvNameChanged(string value) { UpdateFilterState(); RestartDebounce(); }
+    partial void OnAdvCodeChanged(string value) { UpdateFilterState(); RestartDebounce(); }
+    partial void OnAdvNumberChanged(string value) { UpdateFilterState(); RestartDebounce(); }
+    partial void OnAdvNumberTypeChanged(string value) { UpdateFilterState(); RestartDebounce(); }
+    partial void OnAdvManufacturerChanged(string value) { UpdateFilterState(); RestartDebounce(); }
+    partial void OnAdvApplicabilityChanged(string value) { UpdateFilterState(); RestartDebounce(); }
+    partial void OnAdvAvailabilityChanged(string value) { UpdateFilterState(); RestartDebounce(); }
+    partial void OnAdvDiameterChanged(string value) { UpdateFilterState(); RestartDebounce(); }
+    partial void OnAdvThicknessChanged(string value) { UpdateFilterState(); RestartDebounce(); }
+    partial void OnAdvWidthChanged(string value) { UpdateFilterState(); RestartDebounce(); }
+    partial void OnAdvToleranceChanged(string value) { UpdateFilterState(); RestartDebounce(); }
 }

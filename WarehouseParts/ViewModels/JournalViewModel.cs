@@ -18,6 +18,7 @@ public partial class JournalViewModel : ObservableObject
     private CancellationTokenSource? _loadCancellation;
     private int _pageIndex;
     private int _total;
+    private bool _hasLoaded;
 
     [ObservableProperty]
     private ObservableCollection<JournalRow> _rows = new();
@@ -46,8 +47,23 @@ public partial class JournalViewModel : ObservableObject
     [ObservableProperty]
     private bool _canNextPage;
 
-    /// <summary>Открывает форму новой операции с предвыбранным типом.</summary>
+    [ObservableProperty]
+    private bool _isLoading;
+
+    [ObservableProperty]
+    private bool _isEmptyResult;
+
     public Func<OperationType, Task>? OpenOperationDialog { get; set; }
+
+    public Func<string, bool>? ConfirmDelete { get; set; }
+
+    public bool CanDelete => SelectedRow is not null;
+
+    public bool HasActiveFilters
+        => FilterCode.Trim().Length > 0
+           || FilterType != FilterTypes[0]
+           || DateFrom is not null
+           || DateTo is not null;
 
     public JournalViewModel(OperationsService operations)
     {
@@ -84,6 +100,16 @@ public partial class JournalViewModel : ObservableObject
         await AddAsync(OperationType.Issue);
     }
 
+    [RelayCommand]
+    private async Task ResetFiltersAsync()
+    {
+        FilterCode = string.Empty;
+        FilterType = FilterTypes[0];
+        DateFrom = null;
+        DateTo = null;
+        await LoadPageAsync(0);
+    }
+
     private async Task AddAsync(OperationType type)
     {
         if (OpenOperationDialog is null)
@@ -95,7 +121,7 @@ public partial class JournalViewModel : ObservableObject
         await LoadPageAsync(0);
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanDelete))]
     private async Task DeleteAsync()
     {
         if (SelectedRow is null)
@@ -103,7 +129,7 @@ public partial class JournalViewModel : ObservableObject
             return;
         }
 
-        if (!DialogHelper.Confirm($"Удалить операцию №{SelectedRow.Id}? Остатки будут пересчитаны."))
+        if (ConfirmDelete?.Invoke($"Удалить операцию №{SelectedRow.Id}? Остатки будут пересчитаны.") == false)
         {
             return;
         }
@@ -137,10 +163,16 @@ public partial class JournalViewModel : ObservableObject
         }
     }
 
-    partial void OnFilterCodeChanged(string value) => RestartFilter();
-    partial void OnFilterTypeChanged(string value) => RestartFilter();
-    partial void OnDateFromChanged(DateTime? value) => RestartFilter();
-    partial void OnDateToChanged(DateTime? value) => RestartFilter();
+    partial void OnFilterCodeChanged(string value) { UpdateFilterState(); RestartFilter(); }
+    partial void OnFilterTypeChanged(string value) { UpdateFilterState(); RestartFilter(); }
+    partial void OnDateFromChanged(DateTime? value) { UpdateFilterState(); RestartFilter(); }
+    partial void OnDateToChanged(DateTime? value) { UpdateFilterState(); RestartFilter(); }
+
+    partial void OnSelectedRowChanged(JournalRow? value)
+    {
+        OnPropertyChanged(nameof(CanDelete));
+        DeleteCommand.NotifyCanExecuteChanged();
+    }
 
     private void RestartFilter()
     {
@@ -154,6 +186,7 @@ public partial class JournalViewModel : ObservableObject
         _loadCancellation?.Dispose();
         _loadCancellation = new CancellationTokenSource();
         var cancellationToken = _loadCancellation.Token;
+        IsLoading = true;
 
         try
         {
@@ -185,6 +218,9 @@ public partial class JournalViewModel : ObservableObject
                 _pageIndex = requestedPage;
                 _total = page.Total;
                 Rows = new ObservableCollection<JournalRow>(page.Rows);
+                SelectedRow = null;
+                _hasLoaded = true;
+                IsEmptyResult = _hasLoaded && page.Rows.Count == 0;
                 UpdatePageState();
                 break;
             }
@@ -196,7 +232,13 @@ public partial class JournalViewModel : ObservableObject
         {
             DialogHelper.ShowError(ex);
         }
+        finally
+        {
+            IsLoading = false;
+        }
     }
+
+    private void UpdateFilterState() => OnPropertyChanged(nameof(HasActiveFilters));
 
     private void UpdatePageState()
     {

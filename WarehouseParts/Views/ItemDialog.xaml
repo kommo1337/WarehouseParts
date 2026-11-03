@@ -2,55 +2,231 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:data="clr-namespace:WarehouseParts.Data"
-        Title="Позиция каталога"
-        Width="460" SizeToContent="Height"
+        xmlns:ui="clr-namespace:WarehouseParts.Ui"
+        Title="{Binding WindowTitle}"
+        Width="840" SizeToContent="Height"
+        MinWidth="780" MaxHeight="780"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
         FocusManager.FocusedElement="{Binding ElementName=CodeTextBox}"
-        WindowStartupLocation="CenterOwner">
-    <StackPanel Margin="10">
-        <TextBlock Text="Номер запчасти *"/>
-        <TextBox x:Name="CodeTextBox" Text="{Binding Code, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,8"/>
-        <TextBlock Text="Наименование *"/>
-        <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,8"/>
+        WindowStartupLocation="CenterOwner"
+        KeyDown="ItemDialog_OnKeyDown">
+    <Window.Resources>
+        <ui:StringToVisibilityConverter x:Key="NonEmptyStringToVisibility"/>
+        <ui:StringToVisibilityConverter x:Key="EmptyStringToVisibility" Invert="True"/>
+    </Window.Resources>
 
-        <TextBlock Text="Производитель"/>
-        <TextBox Text="{Binding Manufacturer, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,8"/>
-
-        <TextBlock Text="Единица измерения *"/>
-        <ComboBox ItemsSource="{x:Static data:DisplayTexts.Units}" SelectedItem="{Binding UnitText}" Margin="0,2,0,8"/>
-
-        <TextBlock Text="Применимость к автомобилю"/>
-        <TextBox Text="{Binding Applicability, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,8"/>
-
-        <Grid Margin="0,0,0,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="12"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="12"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <StackPanel Grid.Column="0">
-                <TextBlock Text="Диаметр, мм"/>
-                <TextBox Text="{Binding DiameterText, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,0"/>
+    <Border Background="{StaticResource SurfaceBrush}"
+            BorderBrush="{StaticResource BorderStrongBrush}"
+            BorderThickness="1"
+            CornerRadius="8"
+            Margin="12">
+        <DockPanel Margin="20">
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+                <TextBlock Text="Есть несохранённые изменения"
+                           Foreground="{StaticResource WarningBrush}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,12,0"
+                           Visibility="{Binding HasChanges, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                <Button Content="Сохранить (Ctrl+Enter)"
+                        Click="Save_Click"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        Padding="18,5" Margin="0,0,8,0"
+                        ToolTip="Сохранить позицию"/>
+                <Button Content="Отмена (Esc)" IsCancel="True" Padding="18,5"/>
             </StackPanel>
-            <StackPanel Grid.Column="2">
-                <TextBlock Text="Толщина, мм"/>
-                <TextBox Text="{Binding ThicknessText, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,0"/>
-            </StackPanel>
-            <StackPanel Grid.Column="4">
-                <TextBlock Text="Ширина, мм"/>
-                <TextBox Text="{Binding WidthText, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,0"/>
-            </StackPanel>
-        </Grid>
 
-        <TextBlock Text="Комментарий"/>
-        <TextBox Text="{Binding Comment, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,10"/>
+            <TabControl x:Name="FormTabs">
+                <!-- ============ F1: Основные данные ============ -->
+                <TabItem>
+                    <TabItem.Header>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Основные данные"/>
+                            <Border Style="{StaticResource NavKeyBadgeStyle}" Margin="8,0,0,0">
+                                <TextBlock Text="F1" Style="{StaticResource NavKeyBadgeTextStyle}"/>
+                            </Border>
+                        </StackPanel>
+                    </TabItem.Header>
+                    <StackPanel Margin="4,14,4,6">
+                        <TextBlock Text="Номер запчасти *" Style="{StaticResource HintTextStyle}"/>
+                        <TextBox x:Name="CodeTextBox" Text="{Binding Code, UpdateSourceTrigger=PropertyChanged}" Margin="0,3,0,2"/>
+                        <TextBlock Text="{Binding CodeError}" Foreground="{StaticResource DangerBrush}" Margin="0,0,0,8" Visibility="{Binding CodeError, Converter={StaticResource NonEmptyStringToVisibility}}"/>
 
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Content="Сохранить" Click="Save_Click" IsDefault="True" Padding="12,2" Margin="0,0,8,0"/>
-            <Button Content="Отмена" IsCancel="True" Padding="12,2"/>
-        </StackPanel>
-    </StackPanel>
+                        <TextBlock Text="Наименование *" Style="{StaticResource HintTextStyle}"/>
+                        <TextBox x:Name="NameTextBox" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,3,0,2"/>
+                        <TextBlock Text="{Binding NameError}" Foreground="{StaticResource DangerBrush}" Margin="0,0,0,8" Visibility="{Binding NameError, Converter={StaticResource NonEmptyStringToVisibility}}"/>
+
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="180"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Производитель" Style="{StaticResource HintTextStyle}"/>
+                                <TextBox Text="{Binding Manufacturer, UpdateSourceTrigger=PropertyChanged}" Margin="0,3,0,0"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Единица измерения *" Style="{StaticResource HintTextStyle}"/>
+                                <ComboBox ItemsSource="{x:Static data:DisplayTexts.Units}" SelectedItem="{Binding UnitText}" Margin="0,3,0,0"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock Text="Применимость к автомобилю" Style="{StaticResource HintTextStyle}" Margin="0,6,0,0"/>
+                        <TextBox x:Name="ApplicabilityTextBox" Text="{Binding Applicability, UpdateSourceTrigger=PropertyChanged}" Margin="0,3,0,10"/>
+
+                        <CheckBox Content="Указать размеры" IsChecked="{Binding ShowExtendedParams}" Margin="0,0,0,6"/>
+                        <Grid Margin="0,0,0,4" Visibility="{Binding ShowExtendedParams, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Диаметр, мм" Style="{StaticResource HintTextStyle}"/>
+                                <TextBox x:Name="DiameterText" Text="{Binding DiameterText, UpdateSourceTrigger=PropertyChanged}" Margin="0,3,0,0"/>
+                                <TextBlock Text="{Binding DiameterError}" Foreground="{StaticResource DangerBrush}" Margin="0,2,0,0" TextWrapping="Wrap" Visibility="{Binding DiameterError, Converter={StaticResource NonEmptyStringToVisibility}}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Толщина, мм" Style="{StaticResource HintTextStyle}"/>
+                                <TextBox x:Name="ThicknessText" Text="{Binding ThicknessText, UpdateSourceTrigger=PropertyChanged}" Margin="0,3,0,0"/>
+                                <TextBlock Text="{Binding ThicknessError}" Foreground="{StaticResource DangerBrush}" Margin="0,2,0,0" TextWrapping="Wrap" Visibility="{Binding ThicknessError, Converter={StaticResource NonEmptyStringToVisibility}}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="4">
+                                <TextBlock Text="Ширина, мм" Style="{StaticResource HintTextStyle}"/>
+                                <TextBox x:Name="WidthText" Text="{Binding WidthText, UpdateSourceTrigger=PropertyChanged}" Margin="0,3,0,0"/>
+                                <TextBlock Text="{Binding WidthError}" Foreground="{StaticResource DangerBrush}" Margin="0,2,0,0" TextWrapping="Wrap" Visibility="{Binding WidthError, Converter={StaticResource NonEmptyStringToVisibility}}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock Text="Комментарий" Style="{StaticResource HintTextStyle}" Margin="0,8,0,0"/>
+                        <TextBox Text="{Binding Comment, UpdateSourceTrigger=PropertyChanged}" Height="54" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Margin="0,3,0,0"/>
+                    </StackPanel>
+                </TabItem>
+
+                <!-- ============ F2: OEM и другие номера ============ -->
+                <TabItem>
+                    <TabItem.Header>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="OEM и другие номера"/>
+                            <Border Style="{StaticResource NavKeyBadgeStyle}" Margin="8,0,0,0">
+                                <TextBlock Text="F2" Style="{StaticResource NavKeyBadgeTextStyle}"/>
+                            </Border>
+                        </StackPanel>
+                    </TabItem.Header>
+                    <StackPanel Margin="4,14,4,6">
+                        <TextBlock Text="Массовый ввод OEM — основной способ: вставьте список, каждый номер с новой строки или через запятую"
+                                   Style="{StaticResource HintTextStyle}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,4"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="150"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="BulkNumbersText"
+                                     Grid.Column="0"
+                                     Text="{Binding BulkNumbersText, UpdateSourceTrigger=PropertyChanged}"
+                                     AcceptsReturn="True"
+                                     VerticalScrollBarVisibility="Auto"
+                                     TextWrapping="NoWrap"
+                                     Height="120"
+                                     ToolTip="Ctrl+Enter — добавить весь список"/>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Тип номера" Style="{StaticResource HintTextStyle}"/>
+                                <ComboBox ItemsSource="{x:Static data:DisplayTexts.NumberTypes}" SelectedItem="{Binding BulkNumberTypeText}" Margin="0,3,0,6"/>
+                                <Button Content="Добавить список"
+                                        Click="AddNumberList_Click"
+                                        Style="{StaticResource PrimaryButtonStyle}"
+                                        Padding="14,5"
+                                        ToolTip="Разобрать список и добавить номера (Ctrl+Enter в поле)"/>
+                            </StackPanel>
+                        </Grid>
+                        <TextBlock Text="{Binding BulkPreviewText}"
+                                   Style="{StaticResource HintTextStyle}"
+                                   Margin="0,4,0,0"
+                                   Visibility="{Binding BulkPreviewText, Converter={StaticResource NonEmptyStringToVisibility}}"/>
+                        <TextBlock Text="{Binding BulkFeedbackText}"
+                                   Foreground="{StaticResource SuccessBrush}"
+                                   Margin="0,4,0,0"
+                                   Visibility="{Binding BulkFeedbackText, Converter={StaticResource NonEmptyStringToVisibility}}"/>
+                        <TextBlock Text="{Binding BulkNumbersError}"
+                                   Foreground="{StaticResource DangerBrush}"
+                                   Margin="0,4,0,0"
+                                   Visibility="{Binding BulkNumbersError, Converter={StaticResource NonEmptyStringToVisibility}}"/>
+
+                        <Separator Margin="0,14,0,10"/>
+
+                        <TextBlock Text="Один номер" Style="{StaticResource HintTextStyle}" Margin="0,0,0,4"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="110"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <ComboBox Grid.Column="0" ItemsSource="{x:Static data:DisplayTexts.NumberTypes}" SelectedItem="{Binding NewNumberTypeText}"/>
+                            <TextBox x:Name="NewNumberText" Grid.Column="2" Text="{Binding NewNumberText, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="Номер; Enter — добавить"
+                                     KeyDown="NewNumberText_OnKeyDown"/>
+                            <TextBox Grid.Column="4" Text="{Binding NewNumberComment, UpdateSourceTrigger=PropertyChanged}" ToolTip="Комментарий к номеру"/>
+                            <Button Grid.Column="6" Content="Добавить" Click="AddNumber_Click" Padding="14,5"/>
+                        </Grid>
+                        <TextBlock Text="{Binding NewNumberError}"
+                                   Foreground="{StaticResource DangerBrush}"
+                                   Margin="0,4,0,0"
+                                   Visibility="{Binding NewNumberError, Converter={StaticResource NonEmptyStringToVisibility}}"/>
+
+                        <DataGrid ItemsSource="{Binding PendingNumbers}" SelectedItem="{Binding SelectedPendingNumber}"
+                                  IsReadOnly="True" AutoGenerateColumns="False" Height="150" Margin="0,10,0,8">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Тип номера" Binding="{Binding TypeDisplay}" Width="100"/>
+                                <DataGridTextColumn Header="Номер" Binding="{Binding NumberRaw}" Width="220"/>
+                                <DataGridTextColumn Header="Комментарий" Binding="{Binding Comment}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <Button Content="Удалить выбранный номер" Click="RemoveNumber_Click" HorizontalAlignment="Left" Padding="14,5"/>
+                    </StackPanel>
+                </TabItem>
+
+                <!-- ============ F3: Начальный остаток ============ -->
+                <TabItem Visibility="{Binding IsNew, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <TabItem.Header>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Начальный остаток"/>
+                            <Border Style="{StaticResource NavKeyBadgeStyle}" Margin="8,0,0,0">
+                                <TextBlock Text="F3" Style="{StaticResource NavKeyBadgeTextStyle}"/>
+                            </Border>
+                        </StackPanel>
+                    </TabItem.Header>
+                    <StackPanel Margin="4,14,4,6">
+                        <TextBlock Text="При сохранении новой позиции будет создан приход начального остатка."
+                                   TextWrapping="Wrap" Style="{StaticResource PageDescriptionStyle}" Margin="0,0,0,10"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="140"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Количество" Style="{StaticResource HintTextStyle}"/>
+                                <TextBox x:Name="StockQuantityText" Text="{Binding StockQuantityText, UpdateSourceTrigger=PropertyChanged}" Margin="0,3,0,2"/>
+                                <TextBlock Text="{Binding StockQuantityError}" Foreground="{StaticResource DangerBrush}" Visibility="{Binding StockQuantityError, Converter={StaticResource NonEmptyStringToVisibility}}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Комментарий к приходу" Style="{StaticResource HintTextStyle}"/>
+                                <TextBox x:Name="StockCommentText" Text="{Binding StockComment, UpdateSourceTrigger=PropertyChanged}" Margin="0,3,0,0"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </TabItem>
+            </TabControl>
+        </DockPanel>
+    </Border>
 </Window>

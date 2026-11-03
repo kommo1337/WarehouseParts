@@ -17,6 +17,16 @@ public partial class BulkNumbersDialog : Window
         _itemId = itemId;
     }
 
+    private void BulkNumbersDialog_OnKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter
+            && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Control)
+        {
+            e.Handled = true;
+            Save_Click(sender, new RoutedEventArgs());
+        }
+    }
+
     private async void Save_Click(object sender, RoutedEventArgs e)
     {
         try

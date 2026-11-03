@@ -24,6 +24,31 @@ public class SearchResultRow
 
     public string UnitDisplay => DisplayTexts.For(Item.Unit);
 
+    public string ManufacturerDisplay => string.IsNullOrWhiteSpace(Item.Manufacturer) ? "—" : Item.Manufacturer;
+
+    public string ApplicabilityDisplay => string.IsNullOrWhiteSpace(Item.CarApplicability) ? "—" : Item.CarApplicability;
+
+    public string ParametersDisplay
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (Item.Diameter is not null)
+            {
+                parts.Add($"Ø {Item.Diameter} мм");
+            }
+            if (Item.Thickness is not null)
+            {
+                parts.Add($"толщина {Item.Thickness} мм");
+            }
+            if (Item.Width is not null)
+            {
+                parts.Add($"ширина {Item.Width} мм");
+            }
+            return parts.Count == 0 ? "—" : string.Join(", ", parts);
+        }
+    }
+
     public string Status => StockStatus.FromStock(Stock);
 
     public SearchResultType ResultType { get; set; }
@@ -53,4 +78,28 @@ public class SearchResult
     {
         Rows = rows;
     }
+}
+
+/// <summary>Сводка по одному номеру в массовом поиске.</summary>
+public class MassSearchEntry
+{
+    public required string RawNumber { get; init; }
+
+    public required IReadOnlyList<SearchResultRow> Rows { get; init; }
+
+    public int DirectCount => Rows.Count(r => r.ResultType == SearchResultType.DirectMatch);
+
+    public int AnalogCount => Rows.Count(r => r.ResultType == SearchResultType.Analog);
+}
+
+/// <summary>Итог массового поиска: сводка по каждому номеру и список не найденных.</summary>
+public class MassSearchResult
+{
+    public required IReadOnlyList<MassSearchEntry> Entries { get; init; }
+
+    public IReadOnlyList<string> NotFoundNumbers { get; init; } = Array.Empty<string>();
+
+    public int FoundNumberCount => Entries.Count;
+
+    public int TotalRowCount => Entries.Sum(e => e.Rows.Count);
 }

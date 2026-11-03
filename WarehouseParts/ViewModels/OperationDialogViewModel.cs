@@ -5,7 +5,6 @@ using WarehouseParts.Services;
 
 namespace WarehouseParts.ViewModels;
 
-/// <summary>Позиция в списке автоподбора формы операции.</summary>
 public class ItemChoice
 {
     public ItemChoice(Item item)
@@ -22,10 +21,11 @@ public partial class OperationDialogViewModel : ObservableObject
 {
     private readonly OperationsService _operations;
     private readonly CatalogService _catalog;
-    private readonly int? _initialItemId;
+    private int? _initialItemId;
     private readonly SemaphoreSlim _operationGate = new(1, 1);
     private CancellationTokenSource? _choicesCancellation;
     private CancellationTokenSource? _stockCancellation;
+    private int _choicesVersion;
     private int _stockVersion;
 
     [ObservableProperty]
@@ -49,6 +49,21 @@ public partial class OperationDialogViewModel : ObservableObject
     [ObservableProperty]
     private string _availableStockText = "";
 
+    [ObservableProperty]
+    private bool _isLoadingChoices;
+
+    [ObservableProperty]
+    private string _choicesStatusText = "";
+
+    [ObservableProperty]
+    private bool _isSaving;
+
+    [ObservableProperty]
+    private string _itemError = "";
+
+    [ObservableProperty]
+    private string _quantityError = "";
+
     public OperationDialogViewModel(
         OperationsService operations,
         CatalogService catalog,
@@ -67,13 +82,27 @@ public partial class OperationDialogViewModel : ObservableObject
             _filterText = presetItem.Code;
             _selectedChoice = new ItemChoice(presetItem);
             _initialItemId = presetItem.Id;
+            HasPresetItem = true;
         }
 
         _ = ReloadChoicesAsync();
         _ = UpdateAvailableStockAsync();
     }
 
-    /// <summary>Подставляет первое совпадение списка (Enter в поле фильтра).</summary>
+    public bool HasPresetItem { get; }
+
+    public bool IsIssue => DisplayTexts.ParseOperation(OperationTypeText) == OperationType.Issue;
+
+    public bool HasSelectedItem => SelectedChoice is not null;
+
+    public bool CanSave => !IsSaving;
+
+    public string TitleText => IsIssue ? "Новый расход" : "Новый приход";
+
+    public string? SavedMessage { get; private set; }
+
+    public event Action<string>? FocusRequested;
+
     public void PickTopMatch()
     {
         if (SelectedChoice is null && ItemChoices.Count > 0)
@@ -88,9 +117,18 @@ public partial class OperationDialogViewModel : ObservableObject
         _stockCancellation?.Cancel();
     }
 
-    /// <summary>Сохраняет операцию. Возвращает false и текст ошибки при неудаче — диалог остается открытым.</summary>
-    public async Task<(bool Ok, string? Error)> SaveAsync()
+    public async Task CancelPendingAsync()
     {
+        CancelPending();
+        await _operationGate.WaitAsync();
+        _operationGate.Release();
+    }
+
+    public async Task<(bool Ok, string? Error, string? Field)> SaveAsync()
+    {
+        ItemError = string.Empty;
+        QuantityError = string.Empty;
+        IsSaving = true;
         await _operationGate.WaitAsync();
         try
         {
@@ -98,29 +136,42 @@ public partial class OperationDialogViewModel : ObservableObject
             var item = await ResolveItemAsync(CancellationToken.None);
             if (item is null)
             {
-                throw new DomainValidationException("Укажите запчасть");
+                ItemError = "Укажите запчасть";
+                FocusRequested?.Invoke("FilterBox");
+                return (false, ItemError, "FilterBox");
             }
 
             if (!int.TryParse((QuantityText ?? string.Empty).Trim(), out var quantity) || quantity <= 0)
             {
-                throw new DomainValidationException("Количество должно быть целым числом больше нуля");
+                QuantityError = "Количество должно быть целым числом больше нуля";
+                FocusRequested?.Invoke("QuantityBox");
+                return (false, QuantityError, "QuantityBox");
             }
 
             var comment = string.IsNullOrWhiteSpace(Comment) ? null : Comment.Trim();
             await _operations.AddAsync(type, item.Id, quantity, comment);
-            return (true, null);
+            SavedMessage = $"{DisplayTexts.For(type)} {quantity} {DisplayTexts.For(item.Unit)} по позиции «{item.Code} — {item.Name}» сохранён";
+            return (true, null, null);
         }
         catch (DomainValidationException ex)
         {
-            return (false, ex.Message);
+            QuantityError = ex.Message;
+            FocusRequested?.Invoke("QuantityBox");
+            return (false, ex.Message, "QuantityBox");
         }
         finally
         {
             _operationGate.Release();
+            IsSaving = false;
         }
     }
 
-    partial void OnOperationTypeTextChanged(string value) => _ = UpdateAvailableStockAsync();
+    partial void OnOperationTypeTextChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsIssue));
+        OnPropertyChanged(nameof(TitleText));
+        _ = UpdateAvailableStockAsync();
+    }
 
     partial void OnSelectedChoiceChanged(ItemChoice? value)
     {
@@ -129,18 +180,37 @@ public partial class OperationDialogViewModel : ObservableObject
             FilterText = value.DisplayText;
         }
 
+        ItemError = string.Empty;
+        OnPropertyChanged(nameof(HasSelectedItem));
         _ = UpdateAvailableStockAsync();
     }
 
-    partial void OnFilterTextChanged(string value) => _ = ReloadChoicesAsync();
+    partial void OnFilterTextChanged(string value)
+    {
+        ItemError = string.Empty;
+        if (SelectedChoice is not null && !string.Equals(SelectedChoice.DisplayText, value, StringComparison.Ordinal))
+        {
+            SelectedChoice = null;
+        }
+        _ = ReloadChoicesAsync();
+    }
+
+    partial void OnQuantityTextChanged(string value) => QuantityError = string.Empty;
+
+    partial void OnIsLoadingChoicesChanged(bool value) => UpdateChoicesStatus();
+
+    partial void OnItemChoicesChanged(ObservableCollection<ItemChoice> value) => UpdateChoicesStatus();
 
     private async Task ReloadChoicesAsync()
     {
+        var version = Interlocked.Increment(ref _choicesVersion);
         _choicesCancellation?.Cancel();
         _choicesCancellation?.Dispose();
         _choicesCancellation = new CancellationTokenSource();
         var cancellationToken = _choicesCancellation.Token;
         var filter = FilterText ?? string.Empty;
+        IsLoadingChoices = true;
+        UpdateChoicesStatus();
 
         try
         {
@@ -150,9 +220,16 @@ public partial class OperationDialogViewModel : ObservableObject
                 var items = await _catalog.SearchItemsAsync(filter, cancellationToken);
                 var choices = items.Select(i => new ItemChoice(i)).ToList();
                 cancellationToken.ThrowIfCancellationRequested();
+                if (version != _choicesVersion)
+                {
+                    return;
+                }
+
                 ItemChoices = new ObservableCollection<ItemChoice>(choices);
+                var initialId = _initialItemId;
+                _initialItemId = null;
                 SelectedChoice = choices.FirstOrDefault(c => c.DisplayText == filter)
-                    ?? choices.FirstOrDefault(c => c.Item.Id == _initialItemId);
+                    ?? choices.FirstOrDefault(c => c.Item.Id == initialId);
             }
             finally
             {
@@ -164,7 +241,18 @@ public partial class OperationDialogViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            DialogHelper.ShowError(ex);
+            if (version == _choicesVersion)
+            {
+                DialogHelper.ShowError(ex);
+            }
+        }
+        finally
+        {
+            if (version == _choicesVersion)
+            {
+                IsLoadingChoices = false;
+                UpdateChoicesStatus();
+            }
         }
     }
 
@@ -179,16 +267,11 @@ public partial class OperationDialogViewModel : ObservableObject
         try
         {
             AvailableStockText = string.Empty;
-            if (DisplayTexts.ParseOperation(OperationTypeText) != OperationType.Issue)
-            {
-                return;
-            }
-
             await _operationGate.WaitAsync(cancellationToken);
             try
             {
                 var item = await ResolveItemAsync(cancellationToken);
-                if (item is null)
+                if (item is null || version != _stockVersion)
                 {
                     return;
                 }
@@ -197,7 +280,9 @@ public partial class OperationDialogViewModel : ObservableObject
                 cancellationToken.ThrowIfCancellationRequested();
                 if (version == _stockVersion)
                 {
-                    AvailableStockText = $"Доступно: {stock}";
+                    AvailableStockText = IsIssue
+                        ? $"Доступно: {stock} {DisplayTexts.For(item.Unit)}"
+                        : $"Остаток: {stock} {DisplayTexts.For(item.Unit)}";
                 }
             }
             finally
@@ -210,8 +295,20 @@ public partial class OperationDialogViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            DialogHelper.ShowError(ex);
+            if (version == _stockVersion)
+            {
+                DialogHelper.ShowError(ex);
+            }
         }
+    }
+
+    private void UpdateChoicesStatus()
+    {
+        ChoicesStatusText = IsLoadingChoices
+            ? "Поиск позиций…"
+            : ItemChoices.Count == 0
+                ? "Подходящие позиции не найдены"
+                : string.Empty;
     }
 
     private async Task<Item?> ResolveItemAsync(CancellationToken cancellationToken)

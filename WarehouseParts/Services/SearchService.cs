@@ -117,6 +117,46 @@ public class SearchService
             cancellationToken);
     }
 
+    /// <summary>
+    /// Массовый поиск: каждый номер ищется отдельно быстрым поиском,
+    /// дубликаты (по нормализованному значению) объединяются. Возвращает сводку
+    /// по каждому найденному номеру и отдельный список не найденных номеров
+    /// в исходном написании.
+    /// </summary>
+    public async Task<MassSearchResult> SearchManyAsync(
+        IReadOnlyList<string> rawNumbers,
+        CancellationToken cancellationToken = default)
+    {
+        var unique = rawNumbers
+            .Select(raw => (Raw: raw.Trim(), Normalized: NumberNormalizer.Normalize(raw)))
+            .Where(pair => pair.Normalized.Length > 0)
+            .GroupBy(pair => pair.Normalized, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .ToList();
+
+        var entries = new List<MassSearchEntry>();
+        var notFound = new List<string>();
+        foreach (var (raw, _) in unique)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var result = await SearchQuickAsync(raw, cancellationToken);
+            if (result.Total == 0)
+            {
+                notFound.Add(raw);
+            }
+            else
+            {
+                entries.Add(new MassSearchEntry { RawNumber = raw, Rows = result.Rows });
+            }
+        }
+
+        return new MassSearchResult
+        {
+            Entries = entries,
+            NotFoundNumbers = notFound
+        };
+    }
+
     /// <summary>Сводные показатели каталога для экрана поиска.</summary>
     public async Task<(int Total, int InStock, int OutOfStock)> GetCatalogCountsAsync(CancellationToken cancellationToken = default)
     {

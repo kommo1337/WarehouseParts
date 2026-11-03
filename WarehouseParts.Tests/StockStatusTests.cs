@@ -70,7 +70,20 @@ public class StockStatusTests
                 Assert.Equal(-5, await service.GetStockAsync(item.Id));
                 _ = await service.GetStocksAsync(new[] { item.Id });
 
-                var content = await File.ReadAllTextAsync(logPath);
+                string? content = null;
+                for (var attempt = 0; attempt < 20 && content is null; attempt++)
+                {
+                    try
+                    {
+                        content = await File.ReadAllTextAsync(logPath);
+                    }
+                    catch (IOException) when (attempt < 19)
+                    {
+                        await Task.Delay(25);
+                    }
+                }
+
+                Assert.NotNull(content);
                 Assert.Contains("Отрицательный остаток", content);
             }
         }

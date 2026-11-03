@@ -1,10 +1,12 @@
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using WarehouseParts.Data;
 using WarehouseParts.Services;
+using WarehouseParts.Ui;
 
 namespace WarehouseParts.ViewModels;
 
-/// <summary>Данные окна «Номера и аналоги позиции». Окно только для просмотра.</summary>
 public partial class ItemNumbersViewModel : ObservableObject
 {
     private readonly CatalogService _catalog;
@@ -16,9 +18,11 @@ public partial class ItemNumbersViewModel : ObservableObject
     [ObservableProperty]
     private IReadOnlyList<RelatedItemRow> _relatedItems = Array.Empty<RelatedItemRow>();
 
-    public Item Item { get; }
+    [ObservableProperty]
+    private NumberRowViewModel? _selectedNumber;
 
-    public string Title => $"{Item.Code} — {Item.Name}";
+    [ObservableProperty]
+    private RelatedItemRow? _selectedRelatedItem;
 
     public ItemNumbersViewModel(Item item, CatalogService catalog, SearchService search)
     {
@@ -26,6 +30,14 @@ public partial class ItemNumbersViewModel : ObservableObject
         _catalog = catalog;
         _search = search;
     }
+
+    public Item Item { get; }
+
+    public string Title => $"{Item.Code} — {Item.Name}";
+
+    public bool HasSelectedNumber => SelectedNumber is not null;
+
+    public bool HasSelectedRelatedItem => SelectedRelatedItem is not null;
 
     public async Task LoadAsync()
     {
@@ -39,5 +51,56 @@ public partial class ItemNumbersViewModel : ObservableObject
         {
             DialogHelper.ShowError(ex);
         }
+    }
+
+    [RelayCommand]
+    private void CopyNumbers()
+    {
+        if (Numbers.Count == 0)
+        {
+            AppFeedback.Send("У выбранной позиции нет номеров");
+            return;
+        }
+
+        var text = string.Join(
+            Environment.NewLine,
+            Numbers.Select(n => $"{n.TypeDisplay}\t{n.Number.NumberRaw}\t{n.Number.Comment}"));
+        try
+        {
+            Clipboard.SetText(text);
+            AppFeedback.Send($"Скопировано номеров: {Numbers.Count}");
+        }
+        catch (Exception ex)
+        {
+            DialogHelper.ShowError(ex);
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(HasSelectedRelatedItem))]
+    private void CopyRelatedCode()
+    {
+        var code = SelectedRelatedItem?.Item.Code;
+        if (string.IsNullOrEmpty(code))
+        {
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(code);
+            AppFeedback.Send($"Код «{code}» скопирован");
+        }
+        catch (Exception ex)
+        {
+            DialogHelper.ShowError(ex);
+        }
+    }
+
+    partial void OnSelectedNumberChanged(NumberRowViewModel? value) => OnPropertyChanged(nameof(HasSelectedNumber));
+
+    partial void OnSelectedRelatedItemChanged(RelatedItemRow? value)
+    {
+        OnPropertyChanged(nameof(HasSelectedRelatedItem));
+        CopyRelatedCodeCommand.NotifyCanExecuteChanged();
     }
 }

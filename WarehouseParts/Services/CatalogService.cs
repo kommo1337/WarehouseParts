@@ -18,6 +18,27 @@ public class CatalogItemRow
     public string Status => StockStatus.FromStock(Stock);
 }
 
+/// <summary>Фильтр качества данных каталога.</summary>
+public enum CatalogQualityFilter
+{
+    All,
+    WithoutOem,
+    WithoutManufacturer,
+    WithoutApplicability,
+}
+
+/// <summary>Количество позиций с незаполненными данными для фильтров качества.</summary>
+public class CatalogQualityCounts
+{
+    public int Total { get; set; }
+
+    public int WithoutOem { get; set; }
+
+    public int WithoutManufacturer { get; set; }
+
+    public int WithoutApplicability { get; set; }
+}
+
 /// <summary>Итог массового ввода номеров.</summary>
 public class BulkAddResult
 {
@@ -46,14 +67,53 @@ public class CatalogService
     }
 
     public async Task<List<CatalogItemRow>> GetRowsAsync(CancellationToken cancellationToken = default)
+        => await GetRowsAsync(CatalogQualityFilter.All, cancellationToken);
+
+    /// <summary>
+    /// Строки каталога с фильтром качества данных на уровне запроса.
+    /// «Без OEM» — отсутствие именно номера типа OEM, а не любого номера.
+    /// </summary>
+    public async Task<List<CatalogItemRow>> GetRowsAsync(
+        CatalogQualityFilter qualityFilter,
+        CancellationToken cancellationToken = default)
     {
-        var items = await _db.Items.AsNoTracking().OrderBy(i => i.Code).ToListAsync(cancellationToken);
-        var stocks = await _operations.GetStocksAsync(items.Select(i => i.Id), cancellationToken);
-        return items.Select(item => new CatalogItemRow
+        var items = _db.Items.AsNoTracking();
+        switch (qualityFilter)
+        {
+            case CatalogQualityFilter.WithoutOem:
+                items = items.Where(i => !i.PartNumbers.Any(n => n.NumberType == NumberType.Oem));
+                break;
+            case CatalogQualityFilter.WithoutManufacturer:
+                items = items.Where(i => i.Manufacturer == null || i.Manufacturer.Trim() == string.Empty);
+                break;
+            case CatalogQualityFilter.WithoutApplicability:
+                items = items.Where(i => i.CarApplicability == null || i.CarApplicability.Trim() == string.Empty);
+                break;
+        }
+
+        var list = await items.OrderBy(i => i.Code).ToListAsync(cancellationToken);
+        var stocks = await _operations.GetStocksAsync(list.Select(i => i.Id), cancellationToken);
+        return list.Select(item => new CatalogItemRow
         {
             Item = item,
             Stock = stocks.TryGetValue(item.Id, out var stock) ? stock : 0
         }).ToList();
+    }
+
+    /// <summary>Счётчики проблемных позиций для фильтров качества данных.</summary>
+    public async Task<CatalogQualityCounts> GetQualityCountsAsync(CancellationToken cancellationToken = default)
+    {
+        var items = _db.Items.AsNoTracking();
+        return new CatalogQualityCounts
+        {
+            Total = await items.CountAsync(cancellationToken),
+            WithoutOem = await items
+                .CountAsync(i => !i.PartNumbers.Any(n => n.NumberType == NumberType.Oem), cancellationToken),
+            WithoutManufacturer = await items
+                .CountAsync(i => i.Manufacturer == null || i.Manufacturer.Trim() == string.Empty, cancellationToken),
+            WithoutApplicability = await items
+                .CountAsync(i => i.CarApplicability == null || i.CarApplicability.Trim() == string.Empty, cancellationToken),
+        };
     }
 
     public async Task<Item> AddItemAsync(

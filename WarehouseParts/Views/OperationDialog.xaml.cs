@@ -14,19 +14,69 @@ public partial class OperationDialog : Window
         InitializeComponent();
         _viewModel = new OperationDialogViewModel(operations, catalog, presetType, presetItem);
         DataContext = _viewModel;
-        Closed += (_, _) => _viewModel.CancelPending();
+        _viewModel.FocusRequested += FocusField;
+        Loaded += OperationDialog_OnLoaded;
+        Closed += (_, _) =>
+        {
+            _viewModel.FocusRequested -= FocusField;
+            _viewModel.CancelPending();
+        };
+    }
+
+    public string? SavedMessage => _viewModel.SavedMessage;
+
+    public Task CancelPendingAsync() => _viewModel.CancelPendingAsync();
+
+    private void OperationDialog_OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel.HasPresetItem)
+        {
+            QuantityBox.Focus();
+            QuantityBox.SelectAll();
+            return;
+        }
+
+        FilterBox.Focus();
+        FilterBox.SelectAll();
     }
 
     private async void Save_Click(object sender, RoutedEventArgs e)
     {
-        var (ok, error) = await _viewModel.SaveAsync();
-        if (ok)
+        try
         {
-            DialogResult = true;
+            var (ok, _, _) = await _viewModel.SaveAsync();
+            if (ok)
+            {
+                DialogResult = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            DialogHelper.ShowError(ex);
+        }
+    }
+
+    private void FocusField(string field)
+    {
+        if (field == "QuantityBox")
+        {
+            QuantityBox.Focus();
+            QuantityBox.SelectAll();
             return;
         }
 
-        MessageBox.Show(error, "Проверка данных", MessageBoxButton.OK, MessageBoxImage.Warning);
+        FilterBox.Focus();
+        FilterBox.SelectAll();
+    }
+
+    private void OperationDialog_OnKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter
+            && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Control)
+        {
+            e.Handled = true;
+            Save_Click(sender, new RoutedEventArgs());
+        }
     }
 
     private void Filter_OnKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -36,6 +86,7 @@ public partial class OperationDialog : Window
             e.Handled = true;
             _viewModel.PickTopMatch();
             QuantityBox.Focus();
+            QuantityBox.SelectAll();
         }
     }
 }

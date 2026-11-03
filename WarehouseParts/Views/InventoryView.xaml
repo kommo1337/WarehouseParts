@@ -1,41 +1,109 @@
 <UserControl x:Class="WarehouseParts.Views.InventoryView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <Grid Margin="4">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:WarehouseParts.ViewModels"
+             xmlns:ui="clr-namespace:WarehouseParts.Ui">
+    <Grid Margin="2">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
-            <TextBlock Text="Фильтр (код или наименование):" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <TextBox Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" Width="260"/>
-        </StackPanel>
+        <Border Grid.Row="0"
+                Background="#FFF4E5"
+                BorderBrush="{StaticResource WarningBrush}"
+                BorderThickness="3,0,0,0"
+                CornerRadius="3"
+                Padding="10,7"
+                Margin="0,0,0,8"
+                Visibility="{Binding HasUnapplied, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <TextBlock Text="{Binding UnappliedText}"
+                       Foreground="{StaticResource WarningBrush}"
+                       FontWeight="SemiBold"/>
+        </Border>
 
-        <DataGrid Grid.Row="1" ItemsSource="{Binding Rows}" AutoGenerateColumns="False"
-                  IsReadOnly="True" SelectionMode="Single">
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="Номер запчасти" Binding="{Binding Code}" Width="120"/>
-                <DataGridTextColumn Header="Наименование" Binding="{Binding Name}" Width="*"/>
-                <DataGridTextColumn Header="Учетный остаток" Binding="{Binding Stock}" Width="110"/>
-                <DataGridTemplateColumn Header="Фактический остаток" Width="130">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBox Text="{Binding FactInput, UpdateSourceTrigger=LostFocus}" Width="100" HorizontalAlignment="Left"/>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-                <DataGridTextColumn Header="Расхождение" Binding="{Binding Discrepancy}" Width="100"/>
-                <DataGridTemplateColumn Header="Действие" Width="130">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <Button Content="{Binding ActionLabel}" IsEnabled="{Binding CanApply}" Padding="8,1"
-                                    Command="{Binding DataContext.ApplyRowCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                    CommandParameter="{Binding}"/>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-            </DataGrid.Columns>
-        </DataGrid>
+        <WrapPanel Grid.Row="1" Margin="0,0,0,8">
+            <StackPanel MinWidth="250" Margin="0,0,12,6">
+                <TextBlock Text="Фильтр (код или наименование)" Style="{StaticResource HintTextStyle}"/>
+                <TextBox Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}"/>
+            </StackPanel>
+            <StackPanel MinWidth="170" Margin="0,0,12,6">
+                <TextBlock Text="Расхождения" Style="{StaticResource HintTextStyle}"/>
+                <ComboBox ItemsSource="{x:Static vm:InventoryViewModel.DiscrepancyFilterOptions}" SelectedItem="{Binding DiscrepancyFilter}"/>
+            </StackPanel>
+            <Button Content="Сбросить фильтры"
+                    Command="{Binding ClearFiltersCommand}"
+                    IsEnabled="{Binding HasActiveFilters}"
+                    VerticalAlignment="Bottom"
+                    Padding="14,5"
+                    Margin="0,0,12,6"/>
+            <Button Content="Столбцы ▾"
+                    Click="ColumnsMenu_OnClick"
+                    ToolTip="Показать, скрыть и упорядочить столбцы"
+                    VerticalAlignment="Bottom"
+                    Padding="12,5"
+                    Margin="0,0,12,6"/>
+            <TextBlock Text="{Binding CountText}"
+                       Style="{StaticResource HintTextStyle}"
+                       VerticalAlignment="Bottom"
+                       Margin="0,0,0,8"/>
+        </WrapPanel>
+
+        <Grid Grid.Row="2">
+            <DataGrid x:Name="FactsGrid" ItemsSource="{Binding Rows}" AutoGenerateColumns="False"
+                      IsReadOnly="True" SelectionMode="Single"
+                      KeyDown="FactsGrid_OnKeyDown"
+                      ui:DataGridColumns.TableKey="inventory"
+                      ui:DataGridColumns.RequiredColumns="Наименование">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Номер запчасти" Binding="{Binding Code}" Width="125"/>
+                    <DataGridTextColumn Header="Наименование" Binding="{Binding Name}" Width="2*"/>
+                    <DataGridTextColumn Header="Учетный остаток" Binding="{Binding Stock}" Width="115"/>
+                    <DataGridTemplateColumn Header="Фактический остаток" Width="150">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBox x:Name="FactInputBox"
+                                         Text="{Binding FactInput, UpdateSourceTrigger=PropertyChanged}"
+                                         KeyDown="FactInput_OnKeyDown"
+                                         Width="115"
+                                         HorizontalAlignment="Left"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="Расхождение" Binding="{Binding Discrepancy}" Width="105"/>
+                    <DataGridTemplateColumn Header="Действие" Width="135">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Content="{Binding ActionLabel}" IsEnabled="{Binding CanApply}" Padding="10,3"
+                                        Command="{Binding DataContext.ApplyRowCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                        CommandParameter="{Binding}"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <Border Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource BorderStrongBrush}"
+                    BorderThickness="1"
+                    CornerRadius="3"
+                    Padding="22"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    MinWidth="340"
+                    MaxWidth="520"
+                    Visibility="{Binding IsEmptyResult, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <StackPanel>
+                    <TextBlock Text="Позиции не найдены" Style="{StaticResource PageTitleStyle}" HorizontalAlignment="Center"/>
+                    <TextBlock Text="Измените фильтр или расхождения для проверки."
+                               Style="{StaticResource PageDescriptionStyle}"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               Margin="0,8,0,16"/>
+                    <Button Content="Сбросить фильтры" Command="{Binding ClearFiltersCommand}" IsEnabled="{Binding HasActiveFilters}" HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </UserControl>

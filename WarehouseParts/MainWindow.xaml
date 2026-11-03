@@ -3,19 +3,147 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Учет склада запчастей"
         Width="1280" Height="760"
+        MinWidth="1040" MinHeight="660"
+        WindowState="Maximized"
+        Background="{StaticResource WindowBackgroundBrush}"
         WindowStartupLocation="CenterScreen">
-    <DockPanel>
-        <ListBox x:Name="MenuList"
-                 DockPanel.Dock="Left"
-                 Width="170"
-                 FontSize="14"
-                 SelectionChanged="MenuList_OnSelectionChanged">
-            <ListBoxItem Content="Поиск"/>
-            <ListBoxItem Content="Каталог"/>
-            <ListBoxItem Content="Журнал"/>
-            <ListBoxItem Content="Инвентаризация"/>
-            <ListBoxItem Content="Настройки"/>
-        </ListBox>
-        <ContentControl x:Name="ContentHost" Margin="6"/>
-    </DockPanel>
+    <Window.Resources>
+        <Style x:Key="NavigationListBoxStyle" TargetType="ListBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        </Style>
+
+        <Style x:Key="NavigationItemStyle" TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+            <Setter Property="Margin" Value="0,2"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Container"
+                                Background="Transparent"
+                                BorderBrush="{StaticResource AccentBrush}"
+                                BorderThickness="0"
+                                CornerRadius="4"
+                                Padding="12,10">
+                            <ContentPresenter Content="{TemplateBinding Content}"
+                                              ContentSource="Content"
+                                              VerticalAlignment="Center">
+                                <ContentPresenter.Resources>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="FontSize" Value="14"/>
+                                        <Setter Property="Foreground" Value="{StaticResource PrimaryTextBrush}"/>
+                                    </Style>
+                                </ContentPresenter.Resources>
+                            </ContentPresenter>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Container" Property="Background" Value="{StaticResource NavHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Container" Property="Background" Value="{StaticResource NavSelectedBrush}"/>
+                                <Setter TargetName="Container" Property="BorderThickness" Value="2,0,0,0"/>
+                                <Setter TargetName="Container" Property="Padding" Value="10,10,12,10"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Container" Property="Opacity" Value="0.55"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="230"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Grid.RowSpan="3" Grid.Column="0"
+                Background="{StaticResource NavBackgroundBrush}"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,0,1,0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <StackPanel Grid.Row="0" Margin="18,18,18,10">
+                    <TextBlock Text="Учёт склада"
+                               FontSize="18"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource PrimaryTextBrush}"/>
+                    <TextBlock Text="запчастей"
+                               FontSize="18"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource AccentBrush}"/>
+                </StackPanel>
+                <ListBox x:Name="MenuList"
+                         Grid.Row="1"
+                         ItemContainerStyle="{StaticResource NavigationItemStyle}"
+                         Style="{StaticResource NavigationListBoxStyle}"
+                         SelectedIndex="0"
+                         SelectionChanged="MenuList_OnSelectionChanged">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"/>
+                                <Border Grid.Column="1" Style="{StaticResource NavKeyBadgeStyle}">
+                                    <TextBlock Text="{Binding Hotkey}" Style="{StaticResource NavKeyBadgeTextStyle}"/>
+                                </Border>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="0" Grid.Column="1"
+                Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,0,0,1">
+            <StackPanel Margin="18,14,18,12">
+                <TextBlock x:Name="SectionTitle"
+                           Style="{StaticResource PageTitleStyle}"
+                           Text="{Binding ElementName=MenuList, Path=SelectedItem.Name}"/>
+                <TextBlock x:Name="SectionDescription"
+                           Style="{StaticResource PageDescriptionStyle}"
+                           Margin="0,3,0,0"
+                           Text="{Binding ElementName=MenuList, Path=SelectedItem.Description}"/>
+            </StackPanel>
+        </Border>
+
+        <ContentControl x:Name="ContentHost"
+                        Grid.Row="1" Grid.Column="1"
+                        Margin="18,14,18,10"/>
+
+        <Border x:Name="FeedbackPanel"
+                Grid.Row="2" Grid.Column="1"
+                Margin="0,0,18,14"
+                Padding="12,8"
+                Background="{StaticResource PrimaryTextBrush}"
+                BorderBrush="{StaticResource AccentBrush}"
+                BorderThickness="3,0,0,0"
+                CornerRadius="3"
+                HorizontalAlignment="Right"
+                Visibility="Collapsed">
+            <TextBlock x:Name="FeedbackText"
+                       Foreground="#FFFFFF"
+                       FontSize="13"/>
+        </Border>
+    </Grid>
 </Window>

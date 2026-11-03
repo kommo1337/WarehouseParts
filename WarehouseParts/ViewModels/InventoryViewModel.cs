@@ -2,10 +2,10 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WarehouseParts.Services;
+using WarehouseParts.Ui;
 
 namespace WarehouseParts.ViewModels;
 
-/// <summary>Оборачивает строку инвентаризации: ввод фактического остатка с проверкой и уведомлениями UI.</summary>
 public class InventoryRowViewModel : ObservableObject
 {
     private readonly InventoryRow _row;
@@ -33,7 +33,6 @@ public class InventoryRowViewModel : ObservableObject
 
     public bool CanApply => _row.Action is InventoryAction.Receipt or InventoryAction.Issue;
 
-    /// <summary>Фактический остаток текстом: пустая строка = не заполнен.</summary>
     public string FactInput
     {
         get => _row.Fact?.ToString() ?? "";
@@ -87,6 +86,8 @@ public class InventoryRowViewModel : ObservableObject
 
 public partial class InventoryViewModel : ObservableObject
 {
+    public static readonly string[] DiscrepancyFilterOptions = { "Все", "Есть расхождения", "Без расхождений", "Факт не введён" };
+
     private readonly InventoryService _inventory;
     private readonly SemaphoreSlim _operationGate = new(1, 1);
     private CancellationTokenSource? _reloadCancellation;
@@ -98,12 +99,28 @@ public partial class InventoryViewModel : ObservableObject
     [ObservableProperty]
     private string _filter = "";
 
+    [ObservableProperty]
+    private string _discrepancyFilter = DiscrepancyFilterOptions[0];
+
+    [ObservableProperty]
+    private string _countText = "Позиций: 0";
+
+    [ObservableProperty]
+    private bool _isEmptyResult;
+
     public InventoryViewModel(InventoryService inventory)
     {
         _inventory = inventory;
     }
 
-    /// <summary>Загружает строки при первом показе экрана.</summary>
+    public bool HasUnapplied => _allRows.Any(r => r.Discrepancy.GetValueOrDefault() != 0);
+
+    public string UnappliedText => HasUnapplied
+        ? $"Неприменённые расхождения: {_allRows.Count(r => r.Discrepancy.GetValueOrDefault() != 0)}"
+        : "Неприменённых расхождений нет";
+
+    public bool HasActiveFilters => Filter.Trim().Length > 0 || DiscrepancyFilter != DiscrepancyFilterOptions[0];
+
     public async Task InitializeAsync()
     {
         if (_allRows.Count > 0)
@@ -115,7 +132,6 @@ public partial class InventoryViewModel : ObservableObject
         await ReloadAsync();
     }
 
-    /// <summary>Перечитывает данные при возврате на экран: новые позиции и свежие остатки, введенные факты сохраняются.</summary>
     public async Task ReloadAsync()
     {
         _reloadCancellation?.Cancel();
@@ -130,9 +146,9 @@ public partial class InventoryViewModel : ObservableObject
             {
                 var rows = await _inventory.ReloadRowsAsync(cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
-                _allRows = rows.Select(r => new InventoryRowViewModel(r, _inventory, () => OnPropertyChanged(nameof(HasUnapplied)))).ToList();
+                _allRows = rows.Select(r => new InventoryRowViewModel(r, _inventory, RowChanged)).ToList();
                 ApplyFilter();
-                OnPropertyChanged(nameof(HasUnapplied));
+                RowChanged();
             }
             finally
             {
@@ -153,8 +169,12 @@ public partial class InventoryViewModel : ObservableObject
         _reloadCancellation?.Cancel();
     }
 
-    /// <summary>Есть непримененные ненулевые расхождения.</summary>
-    public bool HasUnapplied => _inventory.HasUnappliedDiscrepancies;
+    [RelayCommand]
+    private void ClearFilters()
+    {
+        Filter = string.Empty;
+        DiscrepancyFilter = DiscrepancyFilterOptions[0];
+    }
 
     [RelayCommand]
     private async Task ApplyRowAsync(InventoryRowViewModel? row)
@@ -175,6 +195,9 @@ public partial class InventoryViewModel : ObservableObject
             try
             {
                 await row.ApplyAsync(DateTime.Now);
+                ApplyFilter();
+                RowChanged();
+                AppFeedback.Send($"Корректировка «{row.ActionLabel}» по позиции «{row.Code} — {row.Name}» проведена");
             }
             finally
             {
@@ -189,6 +212,14 @@ public partial class InventoryViewModel : ObservableObject
 
     partial void OnFilterChanged(string value) => ApplyFilter();
 
+    partial void OnDiscrepancyFilterChanged(string value) => ApplyFilter();
+
+    private void RowChanged()
+    {
+        OnPropertyChanged(nameof(HasUnapplied));
+        OnPropertyChanged(nameof(UnappliedText));
+    }
+
     private void ApplyFilter()
     {
         var text = (Filter ?? "").Trim();
@@ -200,6 +231,20 @@ public partial class InventoryViewModel : ObservableObject
                 || r.Name.Contains(text, StringComparison.OrdinalIgnoreCase));
         }
 
-        Rows = new ObservableCollection<InventoryRowViewModel>(query);
+        query = DiscrepancyFilter switch
+        {
+            "Есть расхождения" => query.Where(r => r.Discrepancy.GetValueOrDefault() != 0),
+            "Без расхождений" => query.Where(r => r.Discrepancy.HasValue && r.Discrepancy.Value == 0),
+            "Факт не введён" => query.Where(r => !r.Discrepancy.HasValue),
+            _ => query,
+        };
+
+        var rows = query.ToList();
+        Rows = new ObservableCollection<InventoryRowViewModel>(rows);
+        CountText = HasActiveFilters
+            ? $"Показано: {rows.Count} из {_allRows.Count}"
+            : $"Позиций: {_allRows.Count}";
+        IsEmptyResult = _allRows.Count > 0 && rows.Count == 0;
+        OnPropertyChanged(nameof(HasActiveFilters));
     }
 }

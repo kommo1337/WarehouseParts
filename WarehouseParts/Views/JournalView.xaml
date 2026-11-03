@@ -1,8 +1,9 @@
 <UserControl x:Class="WarehouseParts.Views.JournalView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="clr-namespace:WarehouseParts.ViewModels">
-    <Grid Margin="4">
+             xmlns:vm="clr-namespace:WarehouseParts.ViewModels"
+             xmlns:ui="clr-namespace:WarehouseParts.Ui">
+    <Grid Margin="2">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -10,37 +11,99 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
-            <Button Content="Приход" Command="{Binding AddReceiptCommand}" Padding="20,6" FontSize="14" Margin="0,0,8,0"/>
-            <Button Content="Расход" Command="{Binding AddIssueCommand}" Padding="20,6" FontSize="14" Margin="0,0,16,0"/>
-            <Button Content="Удалить" Command="{Binding DeleteCommand}" Margin="0,0,16,0"/>
-            <TextBlock Text="Фильтр по номеру:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <TextBox Text="{Binding FilterCode, UpdateSourceTrigger=PropertyChanged}" Width="120" Margin="0,0,12,0"/>
-            <TextBlock Text="Операция:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <ComboBox ItemsSource="{x:Static vm:JournalViewModel.FilterTypes}" SelectedItem="{Binding FilterType}" Width="90" Margin="0,0,12,0"/>
-            <TextBlock Text="Период с" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <DatePicker SelectedDate="{Binding DateFrom}" Width="120" Margin="0,0,6,0"/>
-            <TextBlock Text="по" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <DatePicker SelectedDate="{Binding DateTo}" Width="120"/>
-        </StackPanel>
+        <WrapPanel Grid.Row="0" Margin="0,0,0,8">
+            <Button Content="Приход" Command="{Binding AddReceiptCommand}" Style="{StaticResource PrimaryButtonStyle}" Padding="20,6" Margin="0,0,8,4" ToolTip="Новый приход (Ctrl+R после выбора позиции)"/>
+            <Button Content="Расход" Command="{Binding AddIssueCommand}" Padding="20,6" Margin="0,0,12,4" ToolTip="Новый расход (Ctrl+I после выбора позиции)"/>
+            <Button Content="Удалить" Command="{Binding DeleteCommand}" IsEnabled="{Binding CanDelete}" Padding="14,6" Margin="0,0,16,4"/>
+            <TextBlock Text="Загрузка журнала…"
+                       VerticalAlignment="Center"
+                       Foreground="{StaticResource AccentBrush}"
+                       Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+        </WrapPanel>
 
-        <DataGrid Grid.Row="2" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}"
-                  IsReadOnly="True" AutoGenerateColumns="False" SelectionMode="Single">
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="№" Binding="{Binding Id}" Width="60"/>
-                <DataGridTextColumn Header="Дата" Binding="{Binding CreatedAt, StringFormat=dd.MM.yyyy HH\\:mm}" Width="130"/>
-                <DataGridTextColumn Header="Операция" Binding="{Binding OperationTypeDisplay}" Width="80"/>
-                <DataGridTextColumn Header="Номер запчасти" Binding="{Binding ItemCode}" Width="110"/>
-                <DataGridTextColumn Header="Наименование" Binding="{Binding ItemName}" Width="*"/>
-                <DataGridTextColumn Header="Единица измерения" Binding="{Binding UnitDisplay}" Width="90"/>
-                <DataGridTextColumn Header="Количество" Binding="{Binding Quantity}" Width="80"/>
-                <DataGridTextColumn Header="Остаток после операции" Binding="{Binding BalanceAfter}" Width="150"/>
-                <DataGridTextColumn Header="Комментарий" Binding="{Binding Comment}" Width="200"/>
-            </DataGrid.Columns>
-        </DataGrid>
+        <Border Grid.Row="1"
+                Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderStrongBrush}"
+                BorderThickness="1"
+                CornerRadius="3"
+                Padding="10"
+                Margin="0,0,0,8">
+            <WrapPanel>
+                <StackPanel MinWidth="170" Margin="0,0,14,6">
+                    <TextBlock Text="Код запчасти" Style="{StaticResource HintTextStyle}"/>
+                    <TextBox Text="{Binding FilterCode, UpdateSourceTrigger=PropertyChanged}"/>
+                </StackPanel>
+                <StackPanel MinWidth="120" Margin="0,0,14,6">
+                    <TextBlock Text="Операция" Style="{StaticResource HintTextStyle}"/>
+                    <ComboBox ItemsSource="{x:Static vm:JournalViewModel.FilterTypes}" SelectedItem="{Binding FilterType}"/>
+                </StackPanel>
+                <StackPanel MinWidth="140" Margin="0,0,8,6">
+                    <TextBlock Text="Период с" Style="{StaticResource HintTextStyle}"/>
+                    <DatePicker SelectedDate="{Binding DateFrom}"/>
+                </StackPanel>
+                <StackPanel MinWidth="140" Margin="0,0,14,6">
+                    <TextBlock Text="по" Style="{StaticResource HintTextStyle}"/>
+                    <DatePicker SelectedDate="{Binding DateTo}"/>
+                </StackPanel>
+                <Button Content="Сбросить фильтры"
+                        Command="{Binding ResetFiltersCommand}"
+                        IsEnabled="{Binding HasActiveFilters}"
+                        VerticalAlignment="Bottom"
+                        Padding="14,5"
+                        Margin="0,0,0,6"/>
+            </WrapPanel>
+        </Border>
 
-        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
-            <Button Content="Назад" Command="{Binding PreviousPageCommand}" IsEnabled="{Binding CanPreviousPage}" Margin="0,0,6,0"/>
+        <Grid Grid.Row="2">
+            <DataGrid x:Name="JournalGrid" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}"
+                      IsReadOnly="True" AutoGenerateColumns="False" SelectionMode="Single"
+                      KeyDown="JournalGrid_OnKeyDown"
+                      ui:DataGridColumns.TableKey="journal"
+                      ui:DataGridColumns.RequiredColumns="Наименование">
+                <DataGrid.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Копировать ячейку (Ctrl+C)" Click="CopyCell_OnClick"/>
+                        <MenuItem Header="Копировать строку (Ctrl+Shift+C)" Click="CopyRow_OnClick"/>
+                    </ContextMenu>
+                </DataGrid.ContextMenu>
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="№" Binding="{Binding Id}" Width="60"/>
+                    <DataGridTextColumn Header="Дата" Binding="{Binding CreatedAt, StringFormat=dd.MM.yyyy HH\\:mm}" Width="130"/>
+                    <DataGridTextColumn Header="Операция" Binding="{Binding OperationTypeDisplay}" Width="85"/>
+                    <DataGridTextColumn Header="Номер запчасти" Binding="{Binding ItemCode}" Width="115"/>
+                    <DataGridTextColumn Header="Наименование" Binding="{Binding ItemName}" Width="2*"/>
+                    <DataGridTextColumn Header="Ед." Binding="{Binding UnitDisplay}" Width="55"/>
+                    <DataGridTextColumn Header="Количество" Binding="{Binding Quantity}" Width="85"/>
+                    <DataGridTextColumn Header="Остаток после операции" Binding="{Binding BalanceAfter}" Width="155"/>
+                    <DataGridTextColumn Header="Комментарий" Binding="{Binding Comment}" Width="200"/>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <Border Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource BorderStrongBrush}"
+                    BorderThickness="1"
+                    CornerRadius="3"
+                    Padding="22"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    MinWidth="340"
+                    MaxWidth="520"
+                    Visibility="{Binding IsEmptyResult, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <StackPanel>
+                    <TextBlock Text="Операции не найдены" Style="{StaticResource PageTitleStyle}" HorizontalAlignment="Center"/>
+                    <TextBlock Text="Измените фильтры или создайте новую операцию."
+                               Style="{StaticResource PageDescriptionStyle}"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               Margin="0,8,0,16"/>
+                    <Button Content="Сбросить фильтры" Command="{Binding ResetFiltersCommand}" IsEnabled="{Binding HasActiveFilters}" HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button Content="Столбцы ▾" Click="ColumnsMenu_OnClick" ToolTip="Показать, скрыть и упорядочить столбцы" Padding="12,3" Margin="0,0,12,0"/>
+            <Button Content="Назад" Command="{Binding PreviousPageCommand}" IsEnabled="{Binding CanPreviousPage}" Margin="0,0,6,0" ToolTip="Предыдущая страница (PageUp)"/>
             <TextBlock Text="{Binding PageText}" VerticalAlignment="Center" Margin="0,0,12,0"/>
             <Button Content="Вперёд" Command="{Binding NextPageCommand}" IsEnabled="{Binding CanNextPage}"/>
         </StackPanel>

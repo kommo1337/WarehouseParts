@@ -17,6 +17,16 @@ public partial class NumberDialog : Window
         Title = editNumber is null ? "Новый номер" : "Изменение номера";
     }
 
+    private void NumberDialog_OnKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter
+            && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Control)
+        {
+            e.Handled = true;
+            Save_Click(sender, new RoutedEventArgs());
+        }
+    }
+
     private async void Save_Click(object sender, RoutedEventArgs e)
     {
         var (ok, error) = await _viewModel.SaveAsync();

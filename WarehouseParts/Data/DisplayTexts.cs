@@ -16,6 +16,7 @@ public static class DisplayTexts
     public static readonly string[] NumberTypes = { Oem, Article, Analog };
     public static readonly string[] NumberTypeFilters = { "Любой", Oem, Article, Analog };
     public static readonly string[] AvailabilityFilters = { "Все", StockStatus.InStock, StockStatus.OutOfStock };
+    public static readonly string[] CatalogQualityFilters = { "Все позиции", "Без OEM", "Без производителя", "Без применимости" };
 
     public static string For(OperationType type) => type == OperationType.Receipt ? Receipt : Issue;
 
