@@ -6,3 +6,10 @@ Publish/
 *.suo
 .vs/
 TestResults/
+
+# Служебные файлы проекта: планы, ТЗ, локальные инструменты и CI
+PLAN_FIXES.md
+ТЗ*.md
+.github/
+dotnet-tools.json
+
