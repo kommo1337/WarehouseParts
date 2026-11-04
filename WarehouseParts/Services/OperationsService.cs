@@ -14,6 +14,12 @@ public class OperationsService
 {
     public const string InsufficientStockMessage = "Нельзя удалить операцию: тогда последующие расходы по этой запчасти стали бы невозможны. Сначала удалите или скорректируйте их.";
 
+    /// <summary>
+    /// Именованный мьютекс сериализует проведение и удаление операций между экземплярами
+    /// приложения, чтобы проверка остатка и запись не разъезжались в разных процессах.
+    /// </summary>
+    private static readonly Mutex OperationWriteMutex = new(initiallyOwned: false, @"Local\WarehouseParts.OperationWrite");
+
     private readonly AppDbContext _db;
 
     public OperationsService(AppDbContext db)
@@ -23,87 +29,128 @@ public class OperationsService
 
     public async Task<Operation> AddAsync(OperationType type, int itemId, int quantity, string? comment, CancellationToken cancellationToken = default)
     {
+        OperationWriteMutex.WaitOne();
+        try
+        {
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                var operation = await AddCoreAsync(type, itemId, quantity, comment, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return operation;
+            }
+            catch
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                throw;
+            }
+        }
+        finally
+        {
+            OperationWriteMutex.ReleaseMutex();
+        }
+    }
+
+    /// <summary>
+    /// Добавляет операцию без управления транзакцией и межпроцессной блокировкой.
+    /// Вызывается из составных сценариев, которые сами открывают транзакцию на этом контексте.
+    /// </summary>
+    public async Task<Operation> AddCoreAsync(
+        OperationType type,
+        int itemId,
+        int quantity,
+        string? comment,
+        CancellationToken cancellationToken = default)
+    {
         if (type != OperationType.Receipt && type != OperationType.Issue)
         {
             throw new DomainValidationException("Выберите операцию");
         }
 
-        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
-        try
+        var itemExists = await _db.Items.AnyAsync(i => i.Id == itemId, cancellationToken);
+        if (!itemExists)
         {
-            var itemExists = await _db.Items.AnyAsync(i => i.Id == itemId, cancellationToken);
-            if (!itemExists)
-            {
-                throw new DomainValidationException("Укажите запчасть");
-            }
-
-            if (quantity <= 0)
-            {
-                throw new DomainValidationException("Количество должно быть целым числом больше нуля");
-            }
-
-            if (type == OperationType.Issue)
-            {
-                var stock = await GetStockAsync(itemId, cancellationToken);
-                if (quantity > stock)
-                {
-                    throw new DomainValidationException($"Недостаточно остатка: доступно {stock}");
-                }
-            }
-
-            var operation = new Operation
-            {
-                OperationType = type,
-                ItemId = itemId,
-                Quantity = quantity,
-                CreatedAt = DateTime.Now,
-                Comment = comment
-            };
-            _db.Operations.Add(operation);
-            await _db.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            return operation;
+            throw new DomainValidationException("Укажите запчасть");
         }
-        catch
+
+        if (quantity <= 0)
         {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
+            throw new DomainValidationException("Количество должно быть целым числом больше нуля");
         }
+
+        if (type == OperationType.Issue)
+        {
+            var stock = await GetStockAsync(itemId, cancellationToken);
+            if (quantity > stock)
+            {
+                throw new DomainValidationException($"Недостаточно остатка: доступно {stock}");
+            }
+        }
+
+        var operation = new Operation
+        {
+            OperationType = type,
+            ItemId = itemId,
+            Quantity = quantity,
+            CreatedAt = DateTime.Now,
+            Comment = comment
+        };
+        _db.Operations.Add(operation);
+        await _db.SaveChangesAsync(cancellationToken);
+        return operation;
     }
 
     public async Task DeleteAsync(int operationId, CancellationToken cancellationToken = default)
     {
-        var operation = await _db.Operations
-            .FirstOrDefaultAsync(o => o.Id == operationId, cancellationToken)
-            ?? throw new DomainValidationException("Операция не найдена");
-
-        var itemOperations = await _db.Operations
-            .AsNoTracking()
-            .Where(o => o.ItemId == operation.ItemId)
-            .OrderBy(o => o.Id)
-            .Select(o => new { o.Id, o.OperationType, o.Quantity })
-            .ToListAsync(cancellationToken);
-
-        var balance = 0;
-        foreach (var existing in itemOperations)
+        OperationWriteMutex.WaitOne();
+        try
         {
-            if (existing.Id == operationId)
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+            try
             {
-                continue;
+                var operation = await _db.Operations
+                    .FirstOrDefaultAsync(o => o.Id == operationId, cancellationToken)
+                    ?? throw new DomainValidationException("Операция не найдена");
+
+                var itemOperations = await _db.Operations
+                    .AsNoTracking()
+                    .Where(o => o.ItemId == operation.ItemId)
+                    .OrderBy(o => o.Id)
+                    .Select(o => new { o.Id, o.OperationType, o.Quantity })
+                    .ToListAsync(cancellationToken);
+
+                var balance = 0;
+                foreach (var existing in itemOperations)
+                {
+                    if (existing.Id == operationId)
+                    {
+                        continue;
+                    }
+
+                    balance += existing.OperationType == OperationType.Receipt
+                        ? existing.Quantity
+                        : -existing.Quantity;
+
+                    if (balance < 0)
+                    {
+                        throw new DomainValidationException(InsufficientStockMessage);
+                    }
+                }
+
+                _db.Operations.Remove(operation);
+                await _db.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
             }
-
-            balance += existing.OperationType == OperationType.Receipt
-                ? existing.Quantity
-                : -existing.Quantity;
-
-            if (balance < 0)
+            catch
             {
-                throw new DomainValidationException(InsufficientStockMessage);
+                await transaction.RollbackAsync(cancellationToken);
+                throw;
             }
         }
-
-        _db.Operations.Remove(operation);
-        await _db.SaveChangesAsync(cancellationToken);
+        finally
+        {
+            OperationWriteMutex.ReleaseMutex();
+        }
     }
 
     /// <summary>Текущий остаток позиции: сумма приходов минус сумма расходов.</summary>
@@ -195,7 +242,7 @@ public class OperationsService
 
         var parameters = new List<KeyValuePair<string, object>>();
         var countWhere = BuildJournalFilter("o", "i.\"Code\"", code, operationType, dateFrom, dateTo, parameters);
-        var pageWhere = BuildJournalFilter("j", "j.\"ItemCode\"", code, operationType, dateFrom, dateTo, null);
+        var pageWhere = BuildJournalFilter("o", "i.\"Code\"", code, operationType, dateFrom, dateTo, null);
         parameters.Add(new KeyValuePair<string, object>("$take", take));
         parameters.Add(new KeyValuePair<string, object>("$skip", skip));
 
@@ -220,20 +267,23 @@ public class OperationsService
 
             var sql = new StringBuilder("""
                 SELECT j."Id", j."OperationType", j."ItemId", j."Quantity", j."CreatedAt", j."Comment",
-                       j."ItemCode", j."ItemName", j."Unit", j."BalanceAfter"
+                       j."ItemCode", j."ItemName", j."Unit",
+                       (SELECT SUM(CASE WHEN p."OperationType" = 'Приход' THEN p."Quantity" ELSE -p."Quantity" END)
+                        FROM "Operations" AS p
+                        WHERE p."ItemId" = j."ItemId" AND p."Id" <= j."Id") AS "BalanceAfter"
                 FROM (
                     SELECT o."Id", o."OperationType", o."ItemId", o."Quantity", o."CreatedAt", o."Comment",
-                           i."Code" AS "ItemCode", i."Name" AS "ItemName", i."Unit",
-                           SUM(CASE WHEN o."OperationType" = 'Приход' THEN o."Quantity" ELSE -o."Quantity" END)
-                               OVER (PARTITION BY o."ItemId" ORDER BY o."Id"
-                                     ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS "BalanceAfter"
+                           i."Code" AS "ItemCode", i."Name" AS "ItemName", i."Unit"
                     FROM "Operations" AS o
                     INNER JOIN "Items" AS i ON i."Id" = o."ItemId"
-                ) AS j
-                WHERE 1 = 1
+                    WHERE 1 = 1
                 """);
             sql.Append(pageWhere);
-            sql.Append(" ORDER BY j.\"Id\" DESC LIMIT $take OFFSET $skip;");
+            sql.Append("""
+                 ORDER BY o."Id" DESC LIMIT $take OFFSET $skip
+                ) AS j
+                ORDER BY j."Id" DESC;
+                """);
 
             await using var pageCommand = CreateCommand(connection, sql.ToString(), parameters);
             await using var reader = await pageCommand.ExecuteReaderAsync(cancellationToken);

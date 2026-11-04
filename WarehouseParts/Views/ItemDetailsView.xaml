@@ -5,6 +5,7 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
         <ui:OperationTypeTextConverter x:Key="OperationTypeTextConverter"/>
+        <ui:OperationQuantityConverter x:Key="OperationQuantityConverter"/>
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto"
@@ -123,8 +124,7 @@
                                        Text="{Binding OperationType, Converter={StaticResource OperationTypeTextConverter}}"/>
                             <StackPanel Grid.Column="1">
                                 <TextBlock Style="{StaticResource HintTextStyle}">
-                                    <Run Text="+"/>
-                                    <Run Text="{Binding Quantity, Mode=OneWay}"/>
+                                    <Run Text="{Binding Converter={StaticResource OperationQuantityConverter}, Mode=OneWay}"/>
                                     <Run Text=" · "/>
                                     <Run Text="{Binding CreatedAt, StringFormat={}{0:dd.MM.yyyy HH:mm}, Mode=OneWay}"/>
                                 </TextBlock>

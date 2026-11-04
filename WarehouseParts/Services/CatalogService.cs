@@ -47,6 +47,53 @@ public class BulkAddResult
     public int SkippedDuplicates { get; set; }
 }
 
+/// <summary>Новый номер, добавляемый к позиции в составе сценария сохранения.</summary>
+public class PendingNumberInput
+{
+    public PendingNumberInput(NumberType numberType, string numberRaw, string? comment)
+    {
+        NumberType = numberType;
+        NumberRaw = numberRaw;
+        Comment = comment;
+    }
+
+    public NumberType NumberType { get; }
+
+    public string NumberRaw { get; }
+
+    public string? Comment { get; }
+}
+
+/// <summary>Изменение существующего номера по его Id.</summary>
+public class NumberUpdateInput
+{
+    public NumberUpdateInput(int id, NumberType numberType, string numberRaw, string? comment)
+    {
+        Id = id;
+        NumberType = numberType;
+        NumberRaw = numberRaw;
+        Comment = comment;
+    }
+
+    public int Id { get; }
+
+    public NumberType NumberType { get; }
+
+    public string NumberRaw { get; }
+
+    public string? Comment { get; }
+}
+
+/// <summary>Разница номеров карточки: добавленные, изменённые и удалённые по Id.</summary>
+public class NumberChangeSet
+{
+    public IReadOnlyList<PendingNumberInput> Added { get; init; } = Array.Empty<PendingNumberInput>();
+
+    public IReadOnlyList<NumberUpdateInput> Updated { get; init; } = Array.Empty<NumberUpdateInput>();
+
+    public IReadOnlyList<int> DeletedIds { get; init; } = Array.Empty<int>();
+}
+
 /// <summary>
 /// Каталог позиций и их номеров: добавление, редактирование, удаление,
 /// нормализация и контроль дубликатов номеров, массовый ввод списком.
@@ -181,6 +228,175 @@ public class CatalogService
         item.Thickness = thickness;
         item.Width = width;
         await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Атомарное создание позиции: карточка, её номера и начальный приход
+    /// сохраняются одной транзакцией — сбой на любом шаге не оставляет частичных записей.
+    /// </summary>
+    public async Task<Item> CreateItemAsync(
+        string code,
+        string name,
+        UnitType unit,
+        string? manufacturer,
+        string? applicability,
+        string? comment,
+        decimal? diameter,
+        decimal? thickness,
+        decimal? width,
+        IReadOnlyList<PendingNumberInput> numbers,
+        int? initialReceiptQuantity = null,
+        string? initialReceiptComment = null,
+        CancellationToken cancellationToken = default)
+    {
+        code = (code ?? string.Empty).Trim();
+        name = (name ?? string.Empty).Trim();
+        ValidateItemFields(code, name);
+        await EnsureCodeUniqueAsync(code, excludeItemId: null, cancellationToken);
+
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var item = new Item
+            {
+                Code = code,
+                Name = name,
+                Unit = unit,
+                Manufacturer = TrimToNull(manufacturer),
+                CarApplicability = TrimToNull(applicability),
+                Comment = TrimToNull(comment),
+                Diameter = diameter,
+                Thickness = thickness,
+                Width = width
+            };
+            _db.Items.Add(item);
+            await _db.SaveChangesAsync(cancellationToken);
+
+            var keys = new HashSet<(NumberType Type, string Normalized)>();
+            foreach (var number in numbers)
+            {
+                ValidateNumberRaw(number.NumberRaw, out var normalized);
+                if (!keys.Add((number.NumberType, normalized)))
+                {
+                    throw new DomainValidationException(DuplicateNumberMessage);
+                }
+
+                await EnsureNumberKeyUniqueAsync(item.Id, number.NumberType, normalized, excludeNumberId: null, cancellationToken);
+                _db.PartNumbers.Add(new PartNumber
+                {
+                    ItemId = item.Id,
+                    NumberType = number.NumberType,
+                    NumberRaw = number.NumberRaw.Trim(),
+                    NumberNormalized = normalized,
+                    Comment = TrimToNull(number.Comment)
+                });
+            }
+
+            if (initialReceiptQuantity.HasValue)
+            {
+                await _operations.AddCoreAsync(
+                    OperationType.Receipt, item.Id, initialReceiptQuantity.Value, initialReceiptComment, cancellationToken);
+            }
+
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return item;
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Атомарное сохранение карточки с изменениями номеров:
+    /// поля позиции, добавленные, изменённые и удалённые номера применяются одной транзакцией.
+    /// </summary>
+    public async Task UpdateItemWithNumbersAsync(
+        int itemId,
+        string code,
+        string name,
+        UnitType unit,
+        string? manufacturer,
+        string? applicability,
+        string? comment,
+        decimal? diameter,
+        decimal? thickness,
+        decimal? width,
+        NumberChangeSet numberChanges,
+        CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var item = await _db.Items.FirstOrDefaultAsync(i => i.Id == itemId, cancellationToken)
+                ?? throw new DomainValidationException("Позиция не найдена");
+
+            code = (code ?? string.Empty).Trim();
+            name = (name ?? string.Empty).Trim();
+            ValidateItemFields(code, name);
+            await EnsureCodeUniqueAsync(code, itemId, cancellationToken);
+
+            item.Code = code;
+            item.Name = name;
+            item.Unit = unit;
+            item.Manufacturer = TrimToNull(manufacturer);
+            item.CarApplicability = TrimToNull(applicability);
+            item.Comment = TrimToNull(comment);
+            item.Diameter = diameter;
+            item.Thickness = thickness;
+            item.Width = width;
+
+            foreach (var numberId in numberChanges.DeletedIds)
+            {
+                var number = await _db.PartNumbers.FirstOrDefaultAsync(
+                    n => n.Id == numberId && n.ItemId == itemId, cancellationToken);
+                if (number is null)
+                {
+                    throw new DomainValidationException("Номер не найден");
+                }
+
+                _db.PartNumbers.Remove(number);
+            }
+
+            foreach (var update in numberChanges.Updated)
+            {
+                var number = await _db.PartNumbers.FirstOrDefaultAsync(
+                    n => n.Id == update.Id && n.ItemId == itemId, cancellationToken)
+                    ?? throw new DomainValidationException("Номер не найден");
+
+                ValidateNumberRaw(update.NumberRaw, out var normalized);
+                await EnsureNumberKeyUniqueAsync(itemId, update.NumberType, normalized, update.Id, cancellationToken);
+
+                number.NumberType = update.NumberType;
+                number.NumberRaw = update.NumberRaw.Trim();
+                number.NumberNormalized = normalized;
+                number.Comment = TrimToNull(update.Comment);
+            }
+
+            foreach (var added in numberChanges.Added)
+            {
+                ValidateNumberRaw(added.NumberRaw, out var normalized);
+                await EnsureNumberKeyUniqueAsync(itemId, added.NumberType, normalized, excludeNumberId: null, cancellationToken);
+                _db.PartNumbers.Add(new PartNumber
+                {
+                    ItemId = itemId,
+                    NumberType = added.NumberType,
+                    NumberRaw = added.NumberRaw.Trim(),
+                    NumberNormalized = normalized,
+                    Comment = TrimToNull(added.Comment)
+                });
+            }
+
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 
     public async Task DeleteItemAsync(int itemId, CancellationToken cancellationToken = default)

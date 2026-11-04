@@ -7,13 +7,17 @@ namespace WarehouseParts.ViewModels;
 
 public class PendingNumber
 {
-    public PendingNumber(NumberType numberType, string numberRaw, string? comment)
+    public PendingNumber(int? id, NumberType numberType, string numberRaw, string? comment)
     {
+        Id = id;
         NumberType = numberType;
         NumberRaw = numberRaw;
         NumberNormalized = NumberNormalizer.Normalize(numberRaw);
         Comment = comment;
     }
+
+    /// <summary>Id существующего номера в базе; null для ещё не сохранённого.</summary>
+    public int? Id { get; }
 
     public NumberType NumberType { get; }
 
@@ -31,7 +35,7 @@ public partial class ItemDialogViewModel : ObservableObject
     private readonly CatalogService _catalog;
     private readonly OperationsService _operations;
     private readonly CatalogItemRow? _editRow;
-    private readonly HashSet<(NumberType Type, string Normalized)> _initialNumberKeys = new();
+    private readonly List<PartNumber> _initialNumbers = new();
 
     [ObservableProperty]
     private string _code = "";
@@ -185,8 +189,8 @@ public partial class ItemDialogViewModel : ObservableObject
             var numbers = await _catalog.GetNumbersAsync(_editRow.Item.Id);
             foreach (var number in numbers)
             {
-                _initialNumberKeys.Add((number.NumberType, number.NumberNormalized));
-                PendingNumbers.Add(new PendingNumber(number.NumberType, number.NumberRaw, number.Comment));
+                _initialNumbers.Add(number);
+                PendingNumbers.Add(new PendingNumber(number.Id, number.NumberType, number.NumberRaw, number.Comment));
             }
 
             HasChanges = false;
@@ -217,7 +221,7 @@ public partial class ItemDialogViewModel : ObservableObject
             return (false, NewNumberError);
         }
 
-        PendingNumbers.Add(new PendingNumber(type, raw, TrimToNull(NewNumberComment)));
+        PendingNumbers.Add(new PendingNumber(null, type, raw, TrimToNull(NewNumberComment)));
         NewNumberText = "";
         NewNumberComment = "";
         OnPropertyChanged(nameof(HasPendingOem));
@@ -251,7 +255,7 @@ public partial class ItemDialogViewModel : ObservableObject
                 continue;
             }
 
-            PendingNumbers.Add(new PendingNumber(type, raw, null));
+            PendingNumbers.Add(new PendingNumber(null, type, raw, null));
             added++;
         }
 
@@ -320,32 +324,56 @@ public partial class ItemDialogViewModel : ObservableObject
             var unit = DisplayTexts.ParseUnit(UnitText);
             if (IsNew)
             {
-                var item = await _catalog.AddItemAsync(Code, Name, unit, Manufacturer, Applicability, Comment, diameter, thickness, width);
+                var item = await _catalog.CreateItemAsync(
+                    Code,
+                    Name,
+                    unit,
+                    Manufacturer,
+                    Applicability,
+                    Comment,
+                    diameter,
+                    thickness,
+                    width,
+                    PendingNumbers
+                        .Select(n => new PendingNumberInput(n.NumberType, n.NumberRaw, n.Comment))
+                        .ToList(),
+                    stockQuantity,
+                    TrimToNull(StockComment),
+                    CancellationToken.None);
                 SavedItemId = item.Id;
-                foreach (var number in PendingNumbers)
-                {
-                    await _catalog.AddNumberAsync(item.Id, number.NumberType, number.NumberRaw, number.Comment);
-                }
-
-                if (stockQuantity.HasValue)
-                {
-                    await _operations.AddAsync(OperationType.Receipt, item.Id, stockQuantity.Value, TrimToNull(StockComment));
-                }
             }
             else
             {
-                await _catalog.UpdateItemAsync(
-                    _editRow!.Item.Id, Code, Name, unit, Manufacturer, Applicability, Comment, diameter, thickness, width);
+                var initialById = _initialNumbers.ToDictionary(n => n.Id);
+                var currentIds = new HashSet<int>();
+                var added = new List<PendingNumberInput>();
+                var updated = new List<NumberUpdateInput>();
                 foreach (var number in PendingNumbers)
                 {
-                    if (_initialNumberKeys.Contains((number.NumberType, number.NumberNormalized)))
+                    if (number.Id is null)
                     {
+                        added.Add(new PendingNumberInput(number.NumberType, number.NumberRaw, number.Comment));
                         continue;
                     }
 
-                    await _catalog.AddNumberAsync(_editRow.Item.Id, number.NumberType, number.NumberRaw, number.Comment);
-                    _initialNumberKeys.Add((number.NumberType, number.NumberNormalized));
+                    currentIds.Add(number.Id.Value);
+                    var initial = initialById[number.Id.Value];
+                    if (initial.NumberType != number.NumberType
+                        || initial.NumberRaw != number.NumberRaw
+                        || !string.Equals(initial.Comment, number.Comment, StringComparison.Ordinal))
+                    {
+                        updated.Add(new NumberUpdateInput(number.Id.Value, number.NumberType, number.NumberRaw, number.Comment));
+                    }
                 }
+
+                var deletedIds = _initialNumbers
+                    .Where(n => !currentIds.Contains(n.Id))
+                    .Select(n => n.Id)
+                    .ToList();
+
+                await _catalog.UpdateItemWithNumbersAsync(
+                    _editRow!.Item.Id, Code, Name, unit, Manufacturer, Applicability, Comment, diameter, thickness, width,
+                    new NumberChangeSet { Added = added, Updated = updated, DeletedIds = deletedIds });
             }
 
             HasChanges = false;

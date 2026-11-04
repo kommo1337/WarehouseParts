@@ -60,6 +60,17 @@ public partial class App : Application
             Shutdown();
             return;
         }
+        catch (Exception ex)
+        {
+            LogError($"Ошибка при инициализации базы данных: {ex}");
+            MessageBox.Show(
+                $"Не удалось подготовить базу данных при запуске.{Environment.NewLine}Технические детали записаны в errors.log.",
+                "Ошибка запуска",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            Shutdown();
+            return;
+        }
 
         new MainWindow().Show();
     }

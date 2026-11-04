@@ -126,6 +126,11 @@ public partial class OperationDialogViewModel : ObservableObject
 
     public async Task<(bool Ok, string? Error, string? Field)> SaveAsync()
     {
+        if (IsSaving)
+        {
+            return (false, null, null);
+        }
+
         ItemError = string.Empty;
         QuantityError = string.Empty;
         IsSaving = true;
@@ -165,6 +170,8 @@ public partial class OperationDialogViewModel : ObservableObject
             IsSaving = false;
         }
     }
+
+    partial void OnIsSavingChanged(bool value) => OnPropertyChanged(nameof(CanSave));
 
     partial void OnOperationTypeTextChanged(string value)
     {

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -43,21 +44,30 @@ public static class DataGridColumns
             return;
         }
 
-        RestoreOnLoaded(grid);
-        grid.Loaded += (_, _) => RestoreOnLoaded(grid);
+        // Таблица без визуального дерева ещё не готова: восстановление выполнится по Loaded.
+        if (grid.IsLoaded)
+        {
+            RestoreOnLoaded(grid);
+        }
+        else
+        {
+            grid.Loaded += (_, _) => RestoreOnLoaded(grid);
+        }
+
         grid.ColumnDisplayIndexChanged += (_, _) => Save(grid);
         grid.Unloaded += (_, _) => Save(grid);
     }
 
     private static void RestoreOnLoaded(DataGrid grid)
     {
-        if (_initialized.Contains(grid))
+        var state = _states.GetOrCreateValue(grid);
+        if (state.Initialized)
         {
             return;
         }
 
         Restore(grid);
-        _initialized.Add(grid);
+        state.Initialized = true;
     }
 
     /// <summary>Применяет сохранённые настройки: порядок (DisplayIndex), видимость и ширину.</summary>
@@ -105,7 +115,8 @@ public static class DataGridColumns
     {
         var settings = Settings;
         var tableKey = GetTableKey(grid);
-        if (settings is null || tableKey.Length == 0 || !_initialized.Contains(grid))
+        if (settings is null || tableKey.Length == 0
+            || !_states.TryGetValue(grid, out var state) || !state.Initialized)
         {
             return;
         }
@@ -123,7 +134,12 @@ public static class DataGridColumns
         settings.SaveColumns(tableKey, columns);
     }
 
-    private static readonly HashSet<DataGrid> _initialized = new();
+    private static readonly ConditionalWeakTable<DataGrid, GridState> _states = new();
+
+    private sealed class GridState
+    {
+        public bool Initialized { get; set; }
+    }
 
     public static string HeaderText(DataGridColumn column) => column.Header as string ?? string.Empty;
 

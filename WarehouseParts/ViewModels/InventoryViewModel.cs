@@ -169,6 +169,21 @@ public partial class InventoryViewModel : ObservableObject
         _reloadCancellation?.Cancel();
     }
 
+    /// <summary>
+    /// Сбрасывает состояние экрана после подтверждённого ухода: отменяет загрузку
+    /// и очищает введённые фактические остатки, чтобы следующий вход начинался заново.
+    /// </summary>
+    public void Reset()
+    {
+        CancelPending();
+        _inventory.ClearSession();
+        _allRows = new List<InventoryRowViewModel>();
+        Rows = new ObservableCollection<InventoryRowViewModel>();
+        CountText = "Позиций: 0";
+        IsEmptyResult = false;
+        RowChanged();
+    }
+
     [RelayCommand]
     private void ClearFilters()
     {

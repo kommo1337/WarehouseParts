@@ -17,6 +17,8 @@ public partial class ItemDetailsViewModel : ObservableObject
     private readonly CatalogService _catalog;
     private readonly SearchService _search;
     private readonly OperationsService _operations;
+    private readonly SemaphoreSlim _loadGate = new(1, 1);
+    private CancellationTokenSource? _loadCancellation;
     private int _loadVersion;
 
     [ObservableProperty]
@@ -95,32 +97,50 @@ public partial class ItemDetailsViewModel : ObservableObject
         RelatedItems = new ObservableCollection<RelatedItemRow>();
         RecentOperations = new ObservableCollection<Operation>();
 
+        _loadCancellation?.Cancel();
+        _loadCancellation?.Dispose();
+        _loadCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var loadToken = _loadCancellation.Token;
+
         try
         {
-            var numbers = await _catalog.GetNumbersAsync(item.Id, cancellationToken);
-            var related = await _search.GetRelatedItemsAsync(item.Id, cancellationToken);
-            var operations = await _operations.GetRecentOperationsForItemAsync(item.Id, 10, cancellationToken);
-            if (version != _loadVersion)
+            await _loadGate.WaitAsync(loadToken);
+            try
             {
-                return;
-            }
+                var numbers = await _catalog.GetNumbersAsync(item.Id, loadToken);
+                var related = await _search.GetRelatedItemsAsync(item.Id, loadToken);
+                var operations = await _operations.GetRecentOperationsForItemAsync(item.Id, 10, loadToken);
+                loadToken.ThrowIfCancellationRequested();
+                if (version != _loadVersion)
+                {
+                    return;
+                }
 
-            Numbers = new ObservableCollection<NumberRowViewModel>(numbers.Select(n => new NumberRowViewModel(n)));
-            RelatedItems = new ObservableCollection<RelatedItemRow>(related);
-            RecentOperations = new ObservableCollection<Operation>(operations);
+                Numbers = new ObservableCollection<NumberRowViewModel>(numbers.Select(n => new NumberRowViewModel(n)));
+                RelatedItems = new ObservableCollection<RelatedItemRow>(related);
+                RecentOperations = new ObservableCollection<Operation>(operations);
+            }
+            finally
+            {
+                _loadGate.Release();
+            }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (loadToken.IsCancellationRequested || cancellationToken.IsCancellationRequested)
         {
         }
         catch (Exception ex)
         {
-            DialogHelper.ShowError(ex);
+            if (version == _loadVersion)
+            {
+                DialogHelper.ShowError(ex);
+            }
         }
     }
 
     public void Clear()
     {
         Interlocked.Increment(ref _loadVersion);
+        _loadCancellation?.Cancel();
         Item = null;
         Numbers = new ObservableCollection<NumberRowViewModel>();
         RelatedItems = new ObservableCollection<RelatedItemRow>();

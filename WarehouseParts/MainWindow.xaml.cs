@@ -361,6 +361,11 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_currentIndex == InventoryIndex && index != InventoryIndex)
+        {
+            _inventoryVm?.Reset();
+        }
+
         var view = _views[index];
         if (view is null)
         {

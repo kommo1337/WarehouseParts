@@ -112,4 +112,13 @@ public class InventoryService
         row.Stock = row.Fact!.Value;
         return operation;
     }
+
+    /// <summary>
+    /// Сбрасывает состояние инвентаризации: при следующем открытии экрана список
+    /// будет загружен заново, введённые фактические остатки сеанса не сохраняются.
+    /// </summary>
+    public void ClearSession()
+    {
+        _rows = null;
+    }
 }

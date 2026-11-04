@@ -19,7 +19,11 @@ public partial class SearchViewModel : ObservableObject
     private readonly DispatcherTimer _debounce;
     private readonly SemaphoreSlim _operationGate = new(1, 1);
     private CancellationTokenSource? _searchCancellation;
+    private CancellationTokenSource? _massSearchCancellation;
     private int _searchVersion;
+
+    /// <summary>Максимальное количество номеров в одном массовом поиске.</summary>
+    public const int MaxBulkNumbers = 500;
 
     [ObservableProperty]
     private string _quickQuery = "";
@@ -159,6 +163,12 @@ public partial class SearchViewModel : ObservableObject
     /// <summary>Открывает форму редактирования позиции.</summary>
     public Func<Item, Task>? OpenEditItem { get; set; }
 
+    /// <summary>
+    /// Вызывается после входа в массовый поиск, до его выполнения; точка наблюдения
+    /// для тестов конкурентности (например, чтобы отменить поиск в этом моменте).
+    /// </summary>
+    public Func<Task>? MassSearchStarted { get; set; }
+
     /// <summary>Карточка боковой панели предпросмотра; null, если сервисы номеров недоступны (тесты).</summary>
     public ItemDetailsViewModel? Details { get; }
 
@@ -209,6 +219,7 @@ public partial class SearchViewModel : ObservableObject
         _debounce.Stop();
         Interlocked.Increment(ref _searchVersion);
         _searchCancellation?.Cancel();
+        _massSearchCancellation?.Cancel();
     }
 
     [RelayCommand]
@@ -283,20 +294,55 @@ public partial class SearchViewModel : ObservableObject
             return;
         }
 
+        if (numbers.Count > MaxBulkNumbers)
+        {
+            DialogHelper.ShowError(new DomainValidationException(
+                $"Слишком много номеров: {numbers.Count}. Максимум за один массовый поиск — {MaxBulkNumbers}."));
+            return;
+        }
+
+        var version = Interlocked.Increment(ref _searchVersion);
+        _massSearchCancellation?.Cancel();
+        _massSearchCancellation?.Dispose();
+        _massSearchCancellation = new CancellationTokenSource();
+        var cancellationToken = _massSearchCancellation.Token;
+
         ShowBulkChoice = false;
         IsSearching = true;
         SearchStatusText = "Массовый поиск…";
         try
         {
-            var result = await _search.SearchManyAsync(numbers);
-            BuildMassSummary(result);
-            ShowMassResult = true;
-            QuickQuery = string.Empty;
-            HasSearched = false;
-            Rows = new ObservableCollection<SearchResultRow>();
-            RowsView = CreateRowsView(Rows);
-            ConfirmationText = string.Empty;
-            UpdateResultState();
+            await _operationGate.WaitAsync(cancellationToken);
+            try
+            {
+                if (MassSearchStarted is not null)
+                {
+                    await MassSearchStarted();
+                }
+
+                var result = await _search.SearchManyAsync(numbers, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (version != _searchVersion)
+                {
+                    return;
+                }
+
+                BuildMassSummary(result);
+                ShowMassResult = true;
+                QuickQuery = string.Empty;
+                HasSearched = false;
+                Rows = new ObservableCollection<SearchResultRow>();
+                RowsView = CreateRowsView(Rows);
+                ConfirmationText = string.Empty;
+                UpdateResultState();
+            }
+            finally
+            {
+                _operationGate.Release();
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
         }
         catch (Exception ex)
         {
@@ -304,8 +350,11 @@ public partial class SearchViewModel : ObservableObject
         }
         finally
         {
-            IsSearching = false;
-            SearchStatusText = string.Empty;
+            if (version == _searchVersion)
+            {
+                IsSearching = false;
+                SearchStatusText = string.Empty;
+            }
         }
     }
 
@@ -405,18 +454,23 @@ public partial class SearchViewModel : ObservableObject
             return;
         }
 
-        var builder = new StringBuilder();
-        builder.AppendLine("Номер запчасти\tНаименование\tПроизводитель\tПрименимость к автомобилю\tЕдиница измерения\tТекущий остаток\tСтатус наличия\tТип результата\tНайденный или общий номер");
-        foreach (var row in Rows)
+        var headers = new[]
         {
-            builder.AppendLine(
-                $"{row.Item.Code}\t{row.Item.Name}\t{row.Item.Manufacturer}\t{row.Item.CarApplicability}\t" +
-                $"{DisplayTexts.For(row.Item.Unit)}\t{row.Stock}\t{row.Status}\t{row.ResultTypeDisplay}\t{row.MatchedNumber}");
-        }
+            "Номер запчасти", "Наименование", "Производитель", "Применимость к автомобилю",
+            "Единица измерения", "Текущий остаток", "Статус наличия", "Тип результата", "Найденный или общий номер",
+        };
+        var rows = Rows
+            .Select(row => (IReadOnlyList<object?>)new object?[]
+            {
+                row.Item.Code, row.Item.Name, row.Item.Manufacturer, row.Item.CarApplicability,
+                DisplayTexts.For(row.Item.Unit), row.Stock, row.Status, row.ResultTypeDisplay, row.MatchedNumber,
+            })
+            .ToList();
+        var text = GridCopy.BuildRowsText(headers, rows, withHeaders: true);
 
         try
         {
-            Clipboard.SetText(builder.ToString());
+            Clipboard.SetText(text);
             AppFeedback.Send($"Скопировано позиций: {Rows.Count}");
         }
         catch (Exception ex)

@@ -88,7 +88,7 @@ public static class GridCopy
             return false;
         }
 
-        var text = BuildRowsText(headers, new[] { values }, withHeaders: false);
+        var text = BuildRowsText(headers, new[] { values }, withHeaders: true);
         var title = values.Count > 0 ? FormatCell(values[0]) : "строка";
         CopyToClipboard(text, $"Строка «{title}» скопирована");
         return true;
@@ -127,6 +127,20 @@ public static class GridCopy
         _ => value.ToString() ?? string.Empty,
     };
 
+    /// <summary>
+    /// Экранирует поле TSV: значения с табуляцией, переводами строк или кавычками
+    /// оборачиваются в двойные кавычки, внутренние кавычки удваиваются (правила CSV).
+    /// </summary>
+    public static string EscapeField(string value)
+    {
+        if (value.IndexOfAny(new[] { '\t', '\r', '\n', '"' }) < 0)
+        {
+            return value;
+        }
+
+        return "\"" + value.Replace("\"", "\"\"") + "\"";
+    }
+
     /// <summary>Формирует TSV-текст: при withHeaders первая строка — заголовки.</summary>
     public static string BuildRowsText(
         IReadOnlyList<string> headers,
@@ -136,12 +150,12 @@ public static class GridCopy
         var lines = new List<string>();
         if (withHeaders)
         {
-            lines.Add(string.Join("\t", headers));
+            lines.Add(string.Join("\t", headers.Select(EscapeField)));
         }
 
         foreach (var row in rows)
         {
-            lines.Add(string.Join("\t", row.Select(FormatCell)));
+            lines.Add(string.Join("\t", row.Select(v => EscapeField(FormatCell(v)))));
         }
 
         return string.Join(Environment.NewLine, lines);
